@@ -413,9 +413,24 @@ Argument TEST is the case before BODY execution."
                (setq git-gutter:enabled t)))
            (kill-buffer proc-buf)))))))
 
-(defsubst git-gutter:gutter-seperator ()
+(defun git-gutter:tty-face (face)
+  "Resolve FACE for TTY left-margin rendering.
+In TTY frames, named face symbols passed to `propertize' do not have their
+background attribute applied when the text is rendered inside the left margin
+via a `display' property.  Return an inline face plist that includes the
+resolved background explicitly so TTY terminals render it correctly.
+In GUI frames FACE is returned unchanged."
+  (if (or (display-graphic-p) (not (symbolp face)))
+      face
+    (let ((bg (face-background face nil))
+          (fg (face-foreground face nil t)))
+      (if bg
+          `(:foreground ,fg :background ,bg)
+        face))))
+
+(defun git-gutter:gutter-seperator ()
   (when git-gutter:separator-sign
-    (propertize git-gutter:separator-sign 'face 'git-gutter:separator)))
+    (propertize git-gutter:separator-sign 'face (git-gutter:tty-face 'git-gutter:separator))))
 
 (defun git-gutter:before-string (sign)
   (let ((gutter-sep (concat sign (git-gutter:gutter-seperator))))
@@ -434,7 +449,7 @@ Argument TEST is the case before BODY execution."
       (setq face (append
                   (get-text-property 0 'face sign)
                   `(:inherit ,face))))
-    (propertize sign 'face face)))
+    (propertize sign 'face (git-gutter:tty-face face))))
 
 (defsubst git-gutter:linum-get-overlay (pos)
   (cl-loop for ov in (overlays-in pos pos)
@@ -491,7 +506,7 @@ Argument TEST is the case before BODY execution."
   (save-excursion
     (let ((sign (if git-gutter:unchanged-sign
                     (propertize git-gutter:unchanged-sign
-                                'face 'git-gutter:unchanged)
+                                'face (git-gutter:tty-face 'git-gutter:unchanged))
                   " "))
           (move-fn (if git-gutter:visual-line
                        #'git-gutter:next-visual-line
