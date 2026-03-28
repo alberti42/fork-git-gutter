@@ -63,21 +63,31 @@ accessible from Lisp.
 **Glossary for context:**
 
 - `before-string`: an overlay property whose text is prepended at the overlay
-  start position, before the visible buffer text on that row.  Used by
-  git-gutter to place a sign in the left margin on the first visual row.
+  start position, before the visible buffer text.  It applies only to the first
+  visual row of the logical line.  Used by git-gutter to place a sign in the
+  left margin on that row.
 - `wrap-prefix`: an overlay (or text) property whose text is prepended to every
   *continuation* row of the line the overlay spans, before the visible buffer
-  text begins on that row.  Used by `visual-wrap-prefix-mode` to repeat
-  indentation on wrapped lines.
+  text begins on that row.  It is explicitly skipped on the first visual row,
+  making it complementary to `before-string`.  Used by `visual-wrap-prefix-mode`
+  to repeat indentation on wrapped lines.
 - `visual-wrap-prefix-mode`: built into Emacs 30+ (formerly the external
   `adaptive-wrap` package), it makes soft-wrapped lines look indented to the
   level of their content, by setting `wrap-prefix` on each line.  See
   https://emacsredux.com/blog/2026/03/01/soft-wrapping-done-right-with-visual-wrap-prefix-mode/
 
-**The fix:** make the overlay span from `pos` to `(line-end-position)` instead
-of being zero-length, and set `wrap-prefix` to the same margin string as
-`before-string`.  The display engine then places the sign on every visual row
-of the hunk line automatically — one overlay, no Lisp enumeration.
+**The fix:** when `git-gutter:visual-line` is non-nil, one overlay is created
+per buffer line in the hunk, spanning from `pos` to `(line-end-position)`
+instead of being zero-length.  `before-string` places the sign on the first
+visual row as before; since `wrap-prefix` is skipped on the first visual row,
+both properties are needed and cover complementary, non-overlapping sets of
+rows.  `wrap-prefix` is set to the same margin string so the display engine
+repeats it automatically on every continuation row of that buffer line.  This
+replaces the previous approach of one overlay per visual row: instead of
+attempting to enumerate visual row positions from Lisp — which is unreliable —
+we delegate continuation row rendering entirely to the C display loop, which
+is the only place that has precise, authoritative knowledge of screen row
+geometry.
 
 When a `wrap-prefix` text property already exists at `pos` (e.g. from
 `visual-wrap-prefix-mode`), the gutter sign is prepended to it so that
