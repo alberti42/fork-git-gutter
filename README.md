@@ -324,6 +324,62 @@ Default value of `git-gutter:separator-sign` is `nil`.
 Please set `git-gutter:always-show-separator` to non-nil, if you want to show
 separator always.
 
+### Theming the gutter column background
+
+Many modern themes — for example the built-in `modus-operandi` and
+`modus-vivendi` (see https://github.com/protesilaos/modus-themes) — give the
+line-number column a background color that differs from the main buffer
+background.  git-gutter places its change indicators in that same left-margin
+area, so when a theme colors the line numbers, the gutter should share that
+background for the column to look uniform.
+
+git-gutter uses a dedicated face for each type of change: `git-gutter:added`
+for added lines, `git-gutter:modified` for modified lines, and
+`git-gutter:deleted` for deleted lines.  On those rows, the sign character
+configured under [Look and feel](#look-and-feel) (e.g. `git-gutter:added-sign`)
+is drawn in the foreground color of the corresponding face, against that face's
+background color.
+
+The remaining rows — those with no changes — are covered by the
+`git-gutter:unchanged` face (when `git-gutter:unchanged-sign` is set) or the
+`git-gutter:separator` face (when `git-gutter:always-show-separator` is
+non-nil).
+
+**Important gotcha:** `git-gutter:window-width` reserves space for the gutter
+column in every buffer, but on unchanged rows nothing is written into that space
+unless one of the two signs above is configured.  A cell that is reserved but
+never written falls back to the default frame or terminal background — so
+setting a background color on `git-gutter:unchanged` or `git-gutter:separator`
+has no visible effect unless the corresponding sign is also set (even a single
+space `" "`).  Once a sign is in place, those two faces control the background
+of every cell not covered by a diff sign, making them the key to a visually
+uniform column.
+
+To keep the gutter background in sync with the active theme without hardcoding
+a color, derive it from the `line-number` face:
+
+```lisp
+(defun my-git-gutter-update-faces ()
+  (let ((bg (face-background 'line-number nil t)))
+    (when bg
+      ;; All gutter cells share the same background as the line-number column.
+      (dolist (face '(git-gutter:added git-gutter:modified git-gutter:deleted
+                                       git-gutter:unchanged git-gutter:separator))
+        (set-face-background face bg))
+      ;; Make unchanged and separator invisible by matching foreground to background.
+      (dolist (face '(git-gutter:unchanged git-gutter:separator))
+        (set-face-foreground face bg)))))
+
+;; Re-run after every theme change (Emacs 29+).
+(add-hook 'enable-theme-functions (lambda (&rest _) (my-git-gutter-update-faces)))
+(my-git-gutter-update-faces)
+```
+
+Recommendation for theme designers: Theme packages that include explicit support for
+git-gutter should set the background of `git-gutter:unchanged` and `git-gutter:separator`
+to match their line-number or gutter region color.  Leaving these backgrounds
+unspecified is the most common cause of a broken-looking gutter column.
+
 ### Hide gutter if there are no changes
 
 Hide gutter when there are no changes if `git-gutter:hide-gutter` is non-nil.
