@@ -663,7 +663,7 @@ Argument TEST is the case before BODY execution."
              do
              (let ((bound (progn
                             (forward-line (- end-line curline))
-                            (point))))
+                            (line-end-position))))
                (forward-line (- start-line end-line))
                (cl-case type
                  ((modified added)
