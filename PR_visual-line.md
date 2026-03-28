@@ -126,8 +126,13 @@ undefined, so a separator or unchanged overlay can render on top of a hunk
 sign.  Setting `priority 10` on any sign whose text contains a non-whitespace
 character ensures hunk signs win when overlays overlap at the same position.
 
+## Documentation
+
+If this PR is merged I am happy to update the manual accordingly.
+
 ## Commits
 
 1. `a6f52d0` fix: use line-end-position as loop bound in view-set-overlays
 2. `ce515a9` fix: ensure non-whitespace signs take priority over separator overlays
 3. `382341c` fix: use wrap-prefix overlay for visual-line continuation rows
+
