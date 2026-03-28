@@ -448,7 +448,11 @@ Argument TEST is the case before BODY execution."
                    (propertize " "
                                'display
                                `((margin left-margin)
-                                 ,(concat sign (overlay-get it 'linum-str))))))))
+                                 ,(concat sign (overlay-get it 'linum-str)))))
+      ;; Ensure changed signs win over separator/unchanged overlays.
+      (let ((raw (substring-no-properties sign)))
+        (when (string-match-p "\\S-" raw)
+          (overlay-put it 'priority 10)))
 
 (defun git-gutter:put-signs (sign points)
   (if git-gutter:linum-enabled
@@ -457,6 +461,10 @@ Argument TEST is the case before BODY execution."
       (let ((ov (make-overlay pos pos))
             (gutter-sign (git-gutter:before-string sign)))
         (overlay-put ov 'before-string gutter-sign)
+        ;; Ensure changed signs win over separator/unchanged overlays.
+        (let ((raw (substring-no-properties sign)))
+          (when (string-match-p "\\S-" raw)
+            (overlay-put ov 'priority 10)))
         (overlay-put ov 'git-gutter t)))))
 
 (defsubst git-gutter:sign-width (sign)
