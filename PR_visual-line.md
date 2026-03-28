@@ -1,4 +1,4 @@
-# Fix gutter sign on visual-line continuation rows (TTY)
+# Fix gutter sign on visual-line continuation rows
 
 ## Background: visual lines and soft-wrapping
 
@@ -20,22 +20,22 @@ continuation rows, visually important.
 
 ## Problem
 
-In a TTY frame with `git-gutter:visual-line t`, when a buffer line wraps into
-multiple visual rows, the gutter sign (`▐` or any other indicator) appears only
-on the first visual row.  On every continuation row the left margin falls back
-to the buffer background instead of the gutter background, producing a
-color-mismatched stripe wherever soft-wrap occurs.
+With `git-gutter:visual-line t`, when a buffer line wraps into multiple visual
+rows, the gutter sign (`▐` or any other indicator) appears only on the first
+visual row.  On every continuation row the left margin falls back to the buffer
+background instead of the gutter background, producing a color-mismatched
+stripe wherever soft-wrap occurs.  The problem affects both TTY and GUI frames.
 
 ## Root cause
 
-Git-gutter renders TTY signs by attaching a `before-string` to a *zero-length*
+Git-gutter renders signs by attaching a `before-string` to a *zero-length*
 overlay at the start of each buffer line.  A zero-length overlay fires at
 exactly one buffer position; it has no mechanism to inject content on
 continuation rows produced by the display engine for the same logical line.
 
 The previous approach tried to work around this by enumerating visual row
 starts explicitly, using `next-line` (upstream) or `vertical-motion` (early
-attempts in this branch).  Both are unreliable in modern Emacs 30+:
+attempts in this branch).  Both are unreliable:
 
 - `vertical-motion` lands at the last character of the current screen row, not
   at the start of the next one, so the computed position is off by one.
@@ -97,8 +97,10 @@ multiple sources (see https://www.reddit.com/r/emacs/comments/1rpclmq/), so
 this manual prepending is currently the only way to ensure coexistence with
 other packages that set `wrap-prefix`.
 
-The spanning overlay and `wrap-prefix` are applied only in TTY + visual-line
-mode; GUI frames and non-visual-line mode are unaffected.
+The spanning overlay and `wrap-prefix` are applied whenever `git-gutter:visual-line`
+is non-nil, in both TTY and GUI frames.  When `git-gutter:visual-line` is nil
+the overlay remains zero-length and `wrap-prefix` is not set, preserving the
+existing behavior.
 
 ## Related fixes included in this branch
 
