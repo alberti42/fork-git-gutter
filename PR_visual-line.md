@@ -102,15 +102,21 @@ mode; GUI frames and non-visual-line mode are unaffected.
 
 ## Related fixes included in this branch
 
-**`view-set-overlays`: use `line-end-position` as loop bound**
+**`view-set-overlays`: use `line-end-position` as end position**
 
-The loop bound was computed as `(point)` after `forward-line`, which lands at
-the beginning of the next line.  When stepping by visual lines, a single
-wrapped hunk line caused the loop to exit after one iteration: the first
-visual-line step moves point past `bol` of the end-line but still within the
-same logical line, so the bound check failed and subsequent visual rows were
-never collected.  Using `line-end-position` ensures the bound covers the full
-extent of the hunk line regardless of how point advances.
+`view-set-overlays` loops over the buffer lines of a hunk to collect the
+positions where signs should be placed.  The position used to stop the loop was
+`(point)` captured after stepping to the last line of the hunk with the built-in
+Emacs function `forward-line`, which places point at the beginning of the line
+following the hunk.  When stepping by visual lines, a single wrapped hunk line
+caused the loop to exit after one iteration: the first visual-line step moves
+point past `bol` of that following line, but the logical line is still within the
+hunk, so the stop condition was met too early and sign positions on subsequent
+visual rows were never collected.  Using `line-end-position` ensures the loop
+covers the full extent of the last hunk line regardless of how point advances.
+With the main fix in place, both `view-set-overlays` and `view-for-unchanged`
+now always step using the built-in Emacs function `forward-line`, which advances
+by logical (buffer) lines — one newline at a time — rather than by visual rows.
 
 **Priority 10 on non-whitespace signs**
 
