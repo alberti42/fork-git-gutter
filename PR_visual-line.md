@@ -91,7 +91,11 @@ geometry.
 
 When a `wrap-prefix` text property already exists at `pos` (e.g. from
 `visual-wrap-prefix-mode`), the gutter sign is prepended to it so that
-continuation indentation is preserved on wrapped rows.
+continuation indentation is preserved on wrapped rows.  Emacs does not provide
+a left-margin compositor that would automatically combine contributions from
+multiple sources (see https://www.reddit.com/r/emacs/comments/1rpclmq/), so
+this manual prepending is currently the only way to ensure coexistence with
+other packages that set `wrap-prefix`.
 
 The spanning overlay and `wrap-prefix` are applied only in TTY + visual-line
 mode; GUI frames and non-visual-line mode are unaffected.
