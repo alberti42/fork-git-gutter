@@ -1,63 +1,89 @@
 # Fix gutter sign on visual-line continuation rows (TTY)
 
+## Background: visual lines and soft-wrapping
+
+Emacs distinguishes *buffer lines* (separated by newline characters) from
+*visual lines* (screen rows).  When soft-wrapping is active — because text
+exceeds the window width, or because a right margin has been set to constrain
+line length for readability — a single buffer line is displayed across multiple
+visual rows.  The extra rows are called *continuation rows*.
+
+`git-gutter:visual-line` does not enable soft-wrapping; it tells git-gutter
+that soft-wrapping is already in use and that gutter indicators should appear
+on every visual row of a hunk line, not just the first.
+
+Many modern themes give the left-margin column a distinct background color to
+visually separate it from the buffer text — for example the built-in
+`modus-operandi` theme (see https://protesilaos.com/emacs/modus-themes-pictures).
+This makes a consistent gutter background across all rows, including
+continuation rows, visually important.
+
 ## Problem
 
-ANDREA: Unclear. You need to remind what visual lines are. These appear when we have soft-wrapping (typically the text exceed the window width, or a right margin was set to constrain the maximum length for better readability). It is not true that `git-gutter:visual-line` causes soft-wrapping, rather that we instruct git-gutter to handle visual lines. When it is set to nil, simply no signs/symbols are shown there, yet the background color need to match the background color of the left margin.
-
-ANDREA: We should mention that many modern themes use left margins with background colors, like built-in theme modus-operandi (see https://protesilaos.com/emacs/modus-themes-pictures).
-
-When `git-gutter:visual-line` is `t` in a TTY frame and a buffer line wraps
-into multiple visual rows, the gutter sign (`▐` or any other indicator) appears
-only on the first visual row.  Every continuation row shows the terminal
-background instead.
-
-ANDREA: Symptoms are wrong background color in the visual lines, where the background color falls back to the fallback case of the buffer background.
-
-The symptom is a vertical stripe that is interrupted at every soft-wrap point,
-making the gutter look broken on narrow windows or long lines.
+In a TTY frame with `git-gutter:visual-line t`, when a buffer line wraps into
+multiple visual rows, the gutter sign (`▐` or any other indicator) appears only
+on the first visual row.  On every continuation row the left margin falls back
+to the buffer background instead of the gutter background, producing a
+color-mismatched stripe wherever soft-wrap occurs.
 
 ## Root cause
 
 Git-gutter renders TTY signs by attaching a `before-string` to a *zero-length*
 overlay at the start of each buffer line.  A zero-length overlay fires at
-exactly one buffer position; it has no way to inject content on continuation
-rows that are produced by the display engine for the same logical line.
+exactly one buffer position; it has no mechanism to inject content on
+continuation rows produced by the display engine for the same logical line.
 
 The previous approach tried to work around this by enumerating visual row
-starts explicitly, using `next-line` (upstream) or `vertical-motion` (early attempts of mine that produce no success).  Both are fundamentally unreliable (at least in modern Emacs 30+):
+starts explicitly, using `next-line` (upstream) or `vertical-motion` (early
+attempts in this branch).  Both are unreliable in modern Emacs 30+:
 
 - `vertical-motion` lands at the last character of the current screen row, not
   at the start of the next one, so the computed position is off by one.
-- `visual-wrap-prefix-mode` (Emacs 30+) inserts continuation indentation via
+- `visual-wrap-prefix-mode` (see below) inserts continuation indentation via
   `wrap-prefix` text properties, which shifts where visual rows begin in a way
   that `vertical-motion` does not account for.  The result is two overlays on
-  the same screen row, and a gap on the next.
+  the same screen row and a gap on the next.
 
 There is no Lisp-accessible hook that fires once per screen row during
-redisplay the way `display-line-numbers` works internally; any Lisp enumeration
-of visual rows is inherently a heuristic.
+redisplay the way `display-line-numbers` works internally in `xdisp.c`; any
+Lisp enumeration of visual row positions is inherently a heuristic.
 
-## The clean fix
+## The clean fix: `wrap-prefix`
 
-ANDREA: We should mention that we inspected how xdisp.c handles the case of line numbers on the left margin and took it as the exemplary pattern to follow. We should state that this investigation was quite revealing. It led to a different and clean design. [yes, it is ok and good to have a bit of story telling; this is not a PR for a software house].
+Investigating how `display-line-numbers` handles continuation rows in
+`xdisp.c` was the key insight.  Line numbers appear correctly on every visual
+row because the C display loop runs `maybe_produce_line_number` once per screen
+row with direct access to row geometry.  That path is not available from Lisp.
 
-ANDREA: We need to add an explanation/glossary of what wrap-prefix, before-string, and indentation for visual lines.
+However, the same investigation revealed that `wrap-prefix` — the overlay
+property that `visual-wrap-prefix-mode` uses to repeat continuation
+indentation — is driven by exactly the same display-loop mechanism and *is*
+accessible from Lisp.
 
-ANDREA: We should mention that visual-wrap-prefix-mode is the new standard way to perform wrapping in Emacs (https://emacsredux.com/blog/2026/03/01/soft-wrapping-done-right-with-visual-wrap-prefix-mode/; formerlt adaptive-wrap module, now built-in with Emacs 30+).
+**Glossary for context:**
 
-The `wrap-prefix` overlay property is exactly what the display engine uses to
-render content at the start of continuation rows — it is the same mechanism
-`visual-wrap-prefix-mode` uses for indentation.  By making the overlay span
-from `pos` to `(line-end-position)` instead of being zero-length, and setting
-`wrap-prefix` to the same margin string as `before-string`, the sign appears on
-every visual row of a hunk line via a single overlay.  The display engine
-handles continuation row placement correctly, with no Lisp enumeration needed.
+- `before-string`: an overlay property whose text is prepended at the overlay
+  start position, before the visible buffer text on that row.  Used by
+  git-gutter to place a sign in the left margin on the first visual row.
+- `wrap-prefix`: an overlay (or text) property whose text is prepended to every
+  *continuation* row of the line the overlay spans, before the visible buffer
+  text begins on that row.  Used by `visual-wrap-prefix-mode` to repeat
+  indentation on wrapped lines.
+- `visual-wrap-prefix-mode`: built into Emacs 30+ (formerly the external
+  `adaptive-wrap` package), it makes soft-wrapped lines look indented to the
+  level of their content, by setting `wrap-prefix` on each line.  See
+  https://emacsredux.com/blog/2026/03/01/soft-wrapping-done-right-with-visual-wrap-prefix-mode/
+
+**The fix:** make the overlay span from `pos` to `(line-end-position)` instead
+of being zero-length, and set `wrap-prefix` to the same margin string as
+`before-string`.  The display engine then places the sign on every visual row
+of the hunk line automatically — one overlay, no Lisp enumeration.
 
 When a `wrap-prefix` text property already exists at `pos` (e.g. from
 `visual-wrap-prefix-mode`), the gutter sign is prepended to it so that
-continuation indentation is preserved.
+continuation indentation is preserved on wrapped rows.
 
-The spanning overlay and `wrap-prefix` are only applied in TTY + visual-line
+The spanning overlay and `wrap-prefix` are applied only in TTY + visual-line
 mode; GUI frames and non-visual-line mode are unaffected.
 
 ## Related fixes included in this branch
@@ -66,9 +92,9 @@ mode; GUI frames and non-visual-line mode are unaffected.
 
 The loop bound was computed as `(point)` after `forward-line`, which lands at
 the beginning of the next line.  When stepping by visual lines, a single
-wrapped hunk line would cause the loop to exit after one iteration: the first
+wrapped hunk line caused the loop to exit after one iteration: the first
 visual-line step moves point past `bol` of the end-line but still within the
-same logical line, so the bound check fails and subsequent visual rows were
+same logical line, so the bound check failed and subsequent visual rows were
 never collected.  Using `line-end-position` ensures the bound covers the full
 extent of the hunk line regardless of how point advances.
 
