@@ -824,10 +824,6 @@ Argument TEST is the case before BODY execution."
     (insert hunk "\n"))
   (git-gutter:convert-hunk-header type))
 
-(defun git-gutter:apply-directory-option ()
-  (let ((root (locate-dominating-file default-directory ".git")))
-    (file-name-directory (file-relative-name (git-gutter:base-file) root))))
-
 (defun git-gutter:do-stage-hunk (diff-info)
   (let ((content (git-gutter-hunk-content diff-info))
         (type (git-gutter-hunk-type diff-info))
@@ -837,15 +833,11 @@ Argument TEST is the case before BODY execution."
       (with-temp-file patch
         (insert header)
         (git-gutter:insert-staging-hunk content type))
-      (let ((dir-option (git-gutter:apply-directory-option))
-            (options (list "--cached" patch)))
-        (when dir-option
-          (setq options (cons "--directory" (cons dir-option options))))
-        (unless (zerop (apply #'git-gutter:execute-command
-                              "git" nil "apply" "--unidiff-zero"
-                              options))
-          (message "Failed: stating this hunk"))
-        (delete-file patch)))))
+      (unless (zerop (git-gutter:execute-command "git" nil
+                                                 "apply" "--unidiff-zero"
+                                                 "--cached" patch))
+        (message "Failed: stating this hunk"))
+      (delete-file patch))))
 
 (defun git-gutter:stage-hunk ()
   "Stage this hunk like 'git add -p'."
