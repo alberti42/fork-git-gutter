@@ -772,7 +772,7 @@ Argument TEST is the case before BODY execution."
       (when git-gutter:ask-p
         (git-gutter:popup-hunk it))
       (when (or (not git-gutter:ask-p)
-                (yes-or-no-p (format "%s current hunk ? " action)))
+                (yes-or-no-p (format "%s current hunk? " action)))
         (funcall action-fn it)
         (funcall update-fn))
       (if git-gutter:ask-p
@@ -836,7 +836,7 @@ Argument TEST is the case before BODY execution."
       (unless (zerop (git-gutter:execute-command "git" nil
                                                  "apply" "--unidiff-zero"
                                                  "--cached" patch))
-        (message "Failed: stating this hunk"))
+        (message "Failed: staging this hunk"))
       (delete-file patch))))
 
 (defun git-gutter:stage-hunk ()
