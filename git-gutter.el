@@ -790,7 +790,7 @@ Argument TEST is the case before BODY execution."
       (when (zerop (git-gutter:execute-command
                     "git" t "--no-pager" "-c" "diff.autorefreshindex=0"
                     "diff" "--no-color" "--no-ext-diff"
-                    "--relative" (file-name-nondirectory it)))
+                    (file-name-nondirectory it)))
         (goto-char (point-min))
         (forward-line 4)
         (buffer-substring-no-properties (point-min) (point))))))
