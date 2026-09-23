@@ -314,4 +314,73 @@ bar
                         (expand-file-name ".config/x/f.txt"))))
            (should (string-match-p "^\\+FIVE\r?$" cached))))))))
 
+;; Window change hooks.  Emacs runs these hooks only during redisplay,
+;; which batch mode does not do, so the tests call the hook functions
+;; directly.
+
+(defmacro git-gutter-test:with-file-in-repo (&rest body)
+  "Run BODY in a buffer with `git-gutter-mode' on, visiting a committed file."
+  (declare (indent 0))
+  `(with-temporary-directory
+    (lambda ()
+      (git-gutter-test:git "init" "-q")
+      (with-temp-file "f.txt" (insert "1\n"))
+      (git-gutter-test:git "add" "f.txt")
+      (git-gutter-test:git "commit" "-q" "-m" "init")
+      (let ((buf (find-file-noselect (expand-file-name "f.txt"))))
+        (unwind-protect
+            (with-current-buffer buf
+              (git-gutter-mode 1)
+              ,@body)
+          (kill-buffer buf))))))
+
+(defmacro git-gutter-test:count-git-gutter-calls (&rest body)
+  "Run BODY with `git-gutter' replaced by a counter; return the count."
+  (declare (indent 0))
+  `(let ((calls 0))
+     (cl-letf (((symbol-function 'git-gutter)
+                (lambda () (setq calls (1+ calls)))))
+       ,@body)
+     calls))
+
+(ert-deftest git-gutter:window-change-hooks-installed ()
+  "`git-gutter-mode' adds and removes its buffer-local window change hooks."
+  (git-gutter-test:with-file-in-repo
+    (should (memq #'git-gutter:window-buffer-change-function
+                  window-buffer-change-functions))
+    (should (memq #'git-gutter:window-selection-change-function
+                  window-selection-change-functions))
+    (git-gutter-mode -1)
+    (should-not (memq #'git-gutter:window-buffer-change-function
+                      window-buffer-change-functions))
+    (should-not (memq #'git-gutter:window-selection-change-function
+                      window-selection-change-functions))))
+
+(ert-deftest git-gutter:window-selection-change-function ()
+  "Update only for the selected window, and only with `git-gutter-mode' on."
+  (git-gutter-test:with-file-in-repo
+    (save-window-excursion
+      (switch-to-buffer (current-buffer))
+      (let ((selected (selected-window))
+            (other (split-window-right)))
+        (set-window-buffer other (current-buffer))
+        (should (= 1 (git-gutter-test:count-git-gutter-calls
+                       (git-gutter:window-selection-change-function selected))))
+        (should (= 0 (git-gutter-test:count-git-gutter-calls
+                       (git-gutter:window-selection-change-function other))))
+        (git-gutter-mode -1)
+        (should (= 0 (git-gutter-test:count-git-gutter-calls
+                       (git-gutter:window-selection-change-function selected))))))))
+
+(ert-deftest git-gutter:window-buffer-change-function ()
+  "Update when a window starts showing a buffer with `git-gutter-mode' on."
+  (git-gutter-test:with-file-in-repo
+    (save-window-excursion
+      (switch-to-buffer (current-buffer))
+      (should (= 1 (git-gutter-test:count-git-gutter-calls
+                     (git-gutter:window-buffer-change-function (selected-window)))))
+      (git-gutter-mode -1)
+      (should (= 0 (git-gutter-test:count-git-gutter-calls
+                     (git-gutter:window-buffer-change-function (selected-window))))))))
+
 ;;; test-git-gutter.el end here
