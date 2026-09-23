@@ -228,6 +228,11 @@ Can be a directory-local variable in your project.")
 (defvar git-gutter:revision-history nil)
 (defvar git-gutter:update-timer nil)
 (defvar-local git-gutter:last-chars-modified-tick nil)
+(defvar-local git-gutter:live-update-cache nil
+  "Cons (ROOT . ORIGINAL) that live update reuses, or nil.
+ROOT is the true name of the repository root.  ORIGINAL is a temporary
+file with the version live update compares the buffer with, or nil if
+the file has no such version.  A full update clears the cache.")
 
 (defvar git-gutter:popup-buffer "*git-gutter:diff*")
 (defmacro git-gutter:awhen (test &rest body)
@@ -649,6 +654,7 @@ WINDOW is deselected; then it does nothing."
   (concat " *git-gutter-" curfile "-*"))
 
 (defun git-gutter:kill-buffer-hook ()
+  (git-gutter:clear-live-update-cache)
   (let ((buf (git-gutter:diff-process-buffer (git-gutter:base-file))))
     (git-gutter:awhen (get-buffer buf)
       (kill-buffer it))))
@@ -696,6 +702,7 @@ Use `display-line-numbers-mode' instead."
         (when (> git-gutter:verbosity 2)
           (message "Here is not %s work tree" (git-gutter:show-backends)))
         (git-gutter-mode -1))
+    (git-gutter:clear-live-update-cache)
     (remove-hook 'kill-buffer-hook 'git-gutter:kill-buffer-hook t)
     (dolist (hook git-gutter:update-hooks)
       (remove-hook hook 'git-gutter t))
@@ -1031,6 +1038,9 @@ Use `display-line-numbers-mode' instead."
 (defun git-gutter ()
   "Show diff information in gutter"
   (interactive)
+  ;; The index or the commit may have changed since live update last read
+  ;; the original version.
+  (git-gutter:clear-live-update-cache)
   (when (or git-gutter:vcs-type (git-gutter:in-repository-p))
     (let* ((file (git-gutter:base-file))
            (proc-buf (git-gutter:diff-process-buffer file)))
@@ -1184,15 +1194,17 @@ start revision."
        process
        (lambda (proc _event)
          (when (eq (process-status proc) 'exit)
-           (setq git-gutter:enabled nil)
-           (let ((diffinfos (git-gutter:process-diff-output (process-buffer proc))))
-             (when (buffer-live-p curbuf)
+           ;; diff exits with 0 or 1; 2 means it failed, for example
+           ;; because a temporary file is gone.  Keep the signs then.
+           (when (and (<= (process-exit-status proc) 1)
+                      (buffer-live-p curbuf))
+             (let ((diffinfos (git-gutter:process-diff-output (process-buffer proc))))
                (with-current-buffer curbuf
+                 (setq git-gutter:enabled nil)
                  (git-gutter:update-diffinfo diffinfos)
-                 (setq git-gutter:enabled t)))
-             (kill-buffer proc-buf)
-             (delete-file original)
-             (delete-file now))))))))
+                 (setq git-gutter:enabled t))))
+           (kill-buffer proc-buf)
+           (delete-file now)))))))
 
 (defun git-gutter:should-update-p ()
   (let ((chars-modified-tick (buffer-chars-modified-tick)))
@@ -1219,23 +1231,39 @@ start revision."
            (file-name-as-directory
             (buffer-substring-no-properties (point) (line-end-position)))))))))
 
+(defun git-gutter:clear-live-update-cache ()
+  "Delete the file of `git-gutter:live-update-cache' and clear the cache."
+  (let ((original (cdr git-gutter:live-update-cache)))
+    (when (and original (file-exists-p original))
+      (delete-file original)))
+  (setq git-gutter:live-update-cache nil))
+
+(defun git-gutter:live-update-cache (file)
+  "Return `git-gutter:live-update-cache' for FILE, filling it if empty.
+Filling it runs the version control system twice, synchronously: once
+for the repository root and once for the original version of FILE."
+  (or git-gutter:live-update-cache
+      (setq git-gutter:live-update-cache
+            (let* ((root (file-truename (git-gutter:vcs-root git-gutter:vcs-type)))
+                   (original (make-temp-file "git-gutter-orig")))
+              ;; ROOT is a true name; the file name must be one too, or a
+              ;; path through a symbolic link becomes "../../..." relative
+              ;; to ROOT.
+              (unless (git-gutter:write-original-content
+                       original (file-relative-name (file-truename file) root))
+                (delete-file original)
+                (setq original nil))
+              (cons root original)))))
+
 (defun git-gutter:live-update ()
   (git-gutter:awhen (git-gutter:base-file)
     (when (and git-gutter:enabled
                (git-gutter:should-update-p))
-      (let ((file (file-name-nondirectory it))
-            (root (file-truename (git-gutter:vcs-root git-gutter:vcs-type)))
-            (now (make-temp-file "git-gutter-cur"))
-            (original (make-temp-file "git-gutter-orig")))
-        ;; ROOT is a true name; the file name must be one too, or a path
-        ;; through a symbolic link becomes "../../..." relative to ROOT.
-        (if (git-gutter:write-original-content
-             original (file-relative-name (file-truename it) root))
-            (progn
-              (git-gutter:write-current-content now)
-              (git-gutter:start-live-update file original now))
-          (delete-file now)
-          (delete-file original))))))
+      (git-gutter:awhen (cdr (git-gutter:live-update-cache it))
+        (let ((now (make-temp-file "git-gutter-cur")))
+          (git-gutter:write-current-content now)
+          (git-gutter:start-live-update (file-name-nondirectory (git-gutter:base-file))
+                                        it now))))))
 
 (defun git-gutter:all-hunks ()
   "Cound unstaged hunks in all buffers"

@@ -585,6 +585,65 @@ on."
          (with-current-buffer buf (set-buffer-modified-p nil))
          (kill-buffer buf))))))
 
+;; Live update reuses the repository root and the original version.
+
+(defun git-gutter-test:live-update-and-wait ()
+  "Change the first line, run a live update, and wait for its diff."
+  (goto-char (point-min))
+  (insert "x")
+  (git-gutter:live-update)
+  (with-timeout (10 (error "live update did not finish"))
+    (while (get-buffer (git-gutter:diff-process-buffer
+                        (file-name-nondirectory (git-gutter:base-file))))
+      (accept-process-output nil 0.1))))
+
+(ert-deftest git-gutter:live-update-cache ()
+  "Live update runs `git show' once, until a full update clears the cache."
+  (git-gutter-test:with-file-in-repo
+    (let ((shows 0))
+      (cl-letf* ((process-file-orig (symbol-function 'process-file))
+                 ((symbol-function 'process-file)
+                  (lambda (program &rest args)
+                    (when (and (equal program "git") (member "show" args))
+                      (setq shows (1+ shows)))
+                    (apply process-file-orig program args))))
+        (git-gutter-test:live-update-and-wait)
+        (git-gutter-test:live-update-and-wait)
+        (should (= shows 1))
+        (should (equal (mapcar #'git-gutter-hunk-start-line git-gutter:diffinfos) '(1)))
+        (let ((original (cdr git-gutter:live-update-cache)))
+          (should (file-exists-p original))
+          (git-gutter)
+          (should-not git-gutter:live-update-cache)
+          (should-not (file-exists-p original)))
+        (with-timeout (10 (error "git-gutter did not finish"))
+          (while (not git-gutter:enabled)
+            (accept-process-output nil 0.1)))
+        (git-gutter-test:live-update-and-wait)
+        (should (= shows 2)))
+      (set-buffer-modified-p nil))))
+
+(ert-deftest git-gutter:live-update-cache-deleted-on-kill ()
+  "Killing the buffer deletes the cached original version."
+  (let (original)
+    (git-gutter-test:with-file-in-repo
+      (git-gutter-test:live-update-and-wait)
+      (setq original (cdr git-gutter:live-update-cache))
+      (should (file-exists-p original))
+      (set-buffer-modified-p nil))
+    (should-not (file-exists-p original))))
+
+(ert-deftest git-gutter:live-update-keeps-signs-when-diff-fails ()
+  "When diff fails, live update keeps the signs it has."
+  (git-gutter-test:with-file-in-repo
+    (git-gutter-test:live-update-and-wait)
+    (should (equal (mapcar #'git-gutter-hunk-start-line git-gutter:diffinfos) '(1)))
+    ;; Remove the original version behind the cache's back: diff exits 2.
+    (delete-file (cdr git-gutter:live-update-cache))
+    (git-gutter-test:live-update-and-wait)
+    (should (equal (mapcar #'git-gutter-hunk-start-line git-gutter:diffinfos) '(1)))
+    (set-buffer-modified-p nil)))
+
 ;; jj backend.  These tests need the jj program and skip without it,
 ;; unless GIT_GUTTER_TEST_REQUIRE_JJ is set, as in the CI jobs that
 ;; install jj; then a missing jj fails the tests.
