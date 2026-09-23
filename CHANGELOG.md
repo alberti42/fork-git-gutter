@@ -50,7 +50,8 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
   version of the file once, and again after each full update, instead of
   on every update; Emacs waits 4.4 ms per live update on a 2000-line
   file instead of 24.6 ms. `git-gutter:update-interval` accepts
-  fractions of a second, such as 0.1.
+  fractions of a second, such as 0.1, and `nil`, its new default, for no
+  live updates; 0 still means no live updates.
 
 ### Deprecated
 
