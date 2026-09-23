@@ -1227,7 +1227,10 @@ start revision."
             (root (file-truename (git-gutter:vcs-root git-gutter:vcs-type)))
             (now (make-temp-file "git-gutter-cur"))
             (original (make-temp-file "git-gutter-orig")))
-        (if (git-gutter:write-original-content original (file-relative-name it root))
+        ;; ROOT is a true name; the file name must be one too, or a path
+        ;; through a symbolic link becomes "../../..." relative to ROOT.
+        (if (git-gutter:write-original-content
+             original (file-relative-name (file-truename it) root))
             (progn
               (git-gutter:write-current-content now)
               (git-gutter:start-live-update file original now))

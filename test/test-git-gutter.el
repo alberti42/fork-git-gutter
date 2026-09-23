@@ -554,4 +554,35 @@ on."
       (should-not called))
     (should (equal (git-gutter:statistic) '(0 . 0)))))
 
+(ert-deftest git-gutter:live-update-through-symlink ()
+  "Live update works when the file's directory is reached through a symlink."
+  (with-temporary-directory
+   (lambda ()
+     (make-directory "real/repo" t)
+     (skip-unless (ignore-errors (make-symbolic-link "real" "link") t))
+     (let ((default-directory (file-name-as-directory (expand-file-name "real/repo"))))
+       (git-gutter-test:git "init" "-q")
+       (git-gutter-test:write-lines "f.txt" '("1" "2" "3"))
+       (git-gutter-test:git "add" "f.txt")
+       (git-gutter-test:git "commit" "-q" "-m" "init"))
+     (let* ((file (expand-file-name "link/repo/f.txt"))
+            (buf (find-file-noselect file)))
+       (unwind-protect
+           (with-current-buffer buf
+             (git-gutter-mode 1)
+             (with-timeout (10 (error "git-gutter did not finish"))
+               (while (not git-gutter:enabled)
+                 (accept-process-output nil 0.1)))
+             (goto-char (point-min))
+             (delete-region (point) (line-end-position))
+             (insert "ONE")
+             (git-gutter:live-update)
+             (with-timeout (10 (error "live update did not finish"))
+               (while (get-buffer (git-gutter:diff-process-buffer "f.txt"))
+                 (accept-process-output nil 0.1)))
+             (should (equal (mapcar #'git-gutter-hunk-start-line git-gutter:diffinfos)
+                            '(1))))
+         (with-current-buffer buf (set-buffer-modified-p nil))
+         (kill-buffer buf))))))
+
 ;;; test-git-gutter.el end here
