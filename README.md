@@ -54,6 +54,15 @@ signals `wrong-number-of-arguments`, so git-gutter has not worked there
 since 0.92. Declaring 27.1 makes package.el refuse to install it on
 Emacs 26, instead of installing a version that fails.
 
+### linum-mode support removed
+
+Emacs 26.1 added the built-in `display-line-numbers-mode` and announced
+that `linum-mode` would become obsolete; Emacs 29.1 made linum.el
+obsolete. Every Emacs version git-gutter supports (27.1 and later) has
+`display-line-numbers-mode`. git-gutter no longer puts its signs into
+linum's margin. `git-gutter:linum-setup` remains as an obsolete function
+that only shows a warning, so init files that call it still load.
+
 ### Still open
 
 - [#235](https://github.com/emacsorphanage/git-gutter/pull/235): update
