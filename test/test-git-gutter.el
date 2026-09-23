@@ -470,6 +470,7 @@ bar
          (git-gutter:clear-function #'git-gutter:clear-diff-infos))
      (with-temp-buffer
        (dotimes (i 10) (insert (format "%d\n" (1+ i))))
+       (add-hook 'after-change-functions #'git-gutter--after-change nil t)
        ,@body)))
 
 (ert-deftest git-gutter:update-diffinfo-keeps-overlays ()
@@ -529,6 +530,138 @@ bar
         (should (equal (git-gutter-test:sign-overlays) (list ov)))
         (should (= (overlay-end ov) (save-excursion (goto-char (overlay-start ov))
                                                     (line-end-position))))))))
+
+;; `git-gutter:view-diff-infos' skips the hunks and ranges of unchanged
+;; lines whose signs are still right.
+
+(defmacro git-gutter-test:counting-put-signs (&rest body)
+  "Run BODY and return the positions `git-gutter:put-signs' got."
+  (declare (indent 0))
+  `(let ((points nil))
+     (cl-letf* ((put (symbol-function 'git-gutter:put-signs))
+                ((symbol-function 'git-gutter:put-signs)
+                 (lambda (sign pts &optional wrap-sign)
+                   (setq points (append points pts))
+                   (funcall put sign pts wrap-sign))))
+       ,@body)
+     points))
+
+(ert-deftest git-gutter:update-diffinfo-skips-unchanged-hunks ()
+  "Only the hunk with an edit and the ranges beside it are drawn again."
+  (git-gutter-test:with-lines
+    (let ((hunks (list (git-gutter-test:hunk 'modified 3 3)
+                       (git-gutter-test:hunk 'added 7 8))))
+      (git-gutter:update-diffinfo hunks)
+      (should (null (git-gutter-test:counting-put-signs
+                      (git-gutter:update-diffinfo hunks))))
+      ;; Edit line 7.
+      (goto-char (point-min))
+      (forward-line 6)
+      (insert "x")
+      (should (equal (mapcar #'line-number-at-pos
+                             (git-gutter-test:counting-put-signs
+                               (git-gutter:update-diffinfo hunks)))
+                     '(7 8)))
+      ;; A new line above moves the hunks down; their signs moved with the text.
+      (goto-char (point-min))
+      (insert "new\n")
+      (should (equal (sort (mapcar #'line-number-at-pos
+                                   (git-gutter-test:counting-put-signs
+                                     (git-gutter:update-diffinfo
+                                      (list (git-gutter-test:hunk 'added 1 1)
+                                      (git-gutter-test:hunk 'modified 4 4)
+                                            (git-gutter-test:hunk 'added 8 9)))))
+                           #'<)
+                     '(1 2 3)))
+      (should (equal (git-gutter-test:sign-lines)
+                     '((1 "+") (2 ".") (3 ".") (4 "=") (5 ".") (6 ".") (7 ".")
+                       (8 "+") (9 "+") (10 ".") (11 ".")))))))
+
+(ert-deftest git-gutter:update-diffinfo-without-edit-tracking ()
+  "Without `git-gutter--after-change', every sign is drawn again."
+  (git-gutter-test:with-lines
+    (remove-hook 'after-change-functions #'git-gutter--after-change t)
+    (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'modified 3 3)))
+    (should (= 10 (length (git-gutter-test:counting-put-signs
+                           (git-gutter:update-diffinfo
+                            (list (git-gutter-test:hunk 'modified 3 3)))))))))
+
+(ert-deftest git-gutter:update-diffinfo-overlays-in-no-group ()
+  "The first update deletes sign overlays that belong to no group."
+  (git-gutter-test:with-lines
+    (let ((git-gutter:unchanged-sign nil))
+      (git-gutter:put-signs "=" (list (point-min)))
+      (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'added 3 3)))
+      (should (equal (git-gutter-test:sign-lines) '((3 "+")))))))
+
+(ert-deftest git-gutter:update-diffinfo-separator-change ()
+  "Changing `git-gutter:separator-sign' draws the signs again."
+  (git-gutter-test:with-lines
+    (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'modified 3 3)))
+    (let ((git-gutter:separator-sign "|"))
+      (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'modified 3 3)))
+      (should (equal (cadr (assq 3 (git-gutter-test:sign-lines))) "=|")))))
+
+(defun git-gutter-test:sign-state ()
+  "The sign overlays of the current buffer as comparable lists."
+  (mapcar (lambda (ov)
+            (list (overlay-start ov) (overlay-end ov)
+                  (cadr (get-text-property 0 'display (overlay-get ov 'before-string)))
+                  (overlay-get ov 'wrap-prefix)
+                  (overlay-get ov 'priority)))
+          (git-gutter-test:sign-overlays)))
+
+(defun git-gutter-test:random-hunks (lines)
+  "Random sorted, disjoint hunks in a buffer of LINES lines."
+  (let ((line 1) hunks)
+    (while (< line lines)
+      (setq line (+ line (random 4)))
+      (let* ((type (nth (random 3) '(added modified deleted)))
+             (end (if (eq type 'deleted) line (min lines (+ line (random 3))))))
+        (when (<= line lines)
+          (push (git-gutter-test:hunk type line end) hunks))
+        (setq line (+ end 1 (random 3)))))
+    (nreverse hunks)))
+
+(ert-deftest git-gutter:update-diffinfo-random-edits ()
+  "After random edits, the signs are those drawn into a fresh buffer."
+  (random "git-gutter")
+  (dolist (visual '(nil t))
+    (dolist (unchanged '(nil "."))
+      (git-gutter-test:with-lines
+        (let ((git-gutter:visual-line visual)
+              (git-gutter:unchanged-sign unchanged)
+              (hunks nil)
+              (kept 0))
+          (dotimes (_ 200)
+            (dotimes (_ (random 3))
+              (goto-char (1+ (random (buffer-size))))
+              (pcase (random 4)
+                (0 (insert "ab"))
+                (1 (insert "\n"))
+                (2 (insert "x\ny\n"))
+                (3 (delete-region (point) (min (point-max) (+ (point) (random 6)))))))
+            ;; Keep the hunks half of the time, so that groups are kept.
+            (let ((hunks (if (and hunks (zerop (random 2)))
+                             hunks
+                           (git-gutter-test:random-hunks
+                            (line-number-at-pos (point-max)))))
+                  (text (buffer-string))
+                  (groups git-gutter--groups))
+              (git-gutter:update-diffinfo hunks)
+              (cl-incf kept (cl-count-if (lambda (g) (memq g groups))
+                                         git-gutter--groups))
+              (let ((incremental (git-gutter-test:sign-state)))
+                (with-temp-buffer
+                  (insert text)
+                  (git-gutter:update-diffinfo hunks)
+                  ;; Compare the printed forms: before Emacs 29,
+                  ;; `equal-including-properties' compares property
+                  ;; values with `eq'.
+                  (should (equal (prin1-to-string incremental)
+                                 (prin1-to-string (git-gutter-test:sign-state))))))))
+          ;; The test reached the code that keeps groups.
+          (should (> kept 20)))))))
 
 (ert-deftest git-gutter:update-diffinfo-other-view-function ()
   "With another view function, the clear function runs first."

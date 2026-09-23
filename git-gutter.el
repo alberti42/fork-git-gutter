@@ -561,24 +561,106 @@ preserved on wrapped rows."
   (let ((existing (get-text-property pos 'wrap-prefix)))
     (concat (git-gutter:before-string sign) (if (stringp existing) existing ""))))
 
+(cl-defstruct (git-gutter--group
+               (:constructor git-gutter--make-group (key lines overlays)))
+  "The sign overlays drawn for one hunk or one range of unchanged lines.
+KEY identifies the signs, LINES is the number of lines, and OVERLAYS
+are the overlays in buffer order."
+  key lines overlays)
+
+(defvar-local git-gutter--groups nil
+  "The `git-gutter--group's of the sign overlays in the current buffer.")
+
+(defvar-local git-gutter--edited t
+  "The text edited since `git-gutter:view-diff-infos' last drew the signs.
+nil if no text was edited, t for the whole buffer, or a cons of two
+markers around the edited text.")
+
+(defvar git-gutter--old-groups nil
+  "Hash table from positions to the old `git-gutter--group' that starts there.
+`git-gutter:view-diff-infos' binds it while it draws the signs.")
+
 (defvar git-gutter--old-overlays nil
-  "Hash table from positions to the sign overlays that start there.
-`git-gutter:view-diff-infos' fills it before drawing the signs;
-`git-gutter:put-signs' reuses these overlays.")
+  "Hash table from positions to the old sign overlays that start there.
+These overlays belong to no group any more; `git-gutter:put-signs'
+reuses them.  `git-gutter:view-diff-infos' binds it while it draws the
+signs.")
+
+(defvar git-gutter--new-groups nil
+  "The groups drawn so far by `git-gutter:view-diff-infos'.")
+
+(defun git-gutter--after-change (beg end _len)
+  "Add the text from BEG to END to `git-gutter--edited'."
+  (cond ((eq git-gutter--edited t))
+        ((null git-gutter--edited)
+         (setq git-gutter--edited (cons (copy-marker beg) (copy-marker end t))))
+        (t
+         (when (< beg (car git-gutter--edited))
+           (set-marker (car git-gutter--edited) beg))
+         (when (> end (cdr git-gutter--edited))
+           (set-marker (cdr git-gutter--edited) end)))))
+
+(defun git-gutter--set-edited (value)
+  "Set `git-gutter--edited' to VALUE, and release its old markers."
+  (when (consp git-gutter--edited)
+    (set-marker (car git-gutter--edited) nil)
+    (set-marker (cdr git-gutter--edited) nil))
+  (setq git-gutter--edited value))
 
 (defun git-gutter--sign-key (sign)
-  (cons (substring-no-properties sign) (get-text-property 0 'face sign)))
+  (list (substring-no-properties sign) (get-text-property 0 'face sign)
+        git-gutter:separator-sign))
+
+(defun git-gutter--release-group (group)
+  "Move the overlays of GROUP to `git-gutter--old-overlays'."
+  (dolist (ov (git-gutter--group-overlays group))
+    (when (overlay-buffer ov)
+      (push ov (gethash (overlay-start ov) git-gutter--old-overlays)))))
+
+(defun git-gutter--take-group (pos)
+  "Remove from `git-gutter--old-groups' the group at POS and return it."
+  (when git-gutter--old-groups
+    (let ((group (gethash pos git-gutter--old-groups)))
+      (when group
+        (remhash pos git-gutter--old-groups))
+      group)))
 
 (defun git-gutter--old-overlay (pos)
-  "Remove from `git-gutter--old-overlays' an overlay at POS and return it."
+  "Remove from `git-gutter--old-overlays' an overlay at POS and return it.
+If a group starts at POS, release its overlays first."
   (when git-gutter--old-overlays
+    (git-gutter:awhen (git-gutter--take-group pos)
+      (git-gutter--release-group it))
     (let ((ovs (gethash pos git-gutter--old-overlays)))
       (when ovs
         (puthash pos (cdr ovs) git-gutter--old-overlays)
         (car ovs)))))
 
+(defvar git-gutter--edited-lines nil
+  "The lines of `git-gutter--edited': t, nil, or (BEG . END).
+BEG is the start of the first edited line, END the end of the last.
+`git-gutter:view-diff-infos' binds it while it draws the signs.")
+
+(defun git-gutter--edited-lines ()
+  (if (consp git-gutter--edited)
+      (save-excursion
+        (cons (progn (goto-char (car git-gutter--edited)) (line-beginning-position))
+              (progn (goto-char (cdr git-gutter--edited)) (line-end-position))))
+    git-gutter--edited))
+
+(defun git-gutter--group-edited-p (group)
+  "Non-nil if text in the lines of GROUP was edited."
+  (or (eq git-gutter--edited-lines t)
+      (and git-gutter--edited-lines
+           (let ((ovs (git-gutter--group-overlays group)))
+             ;; The overlays start at the beginning of their lines, unless
+             ;; an edit moved them, so comparing the starts is enough.
+             (and (<= (overlay-start (car ovs)) (cdr git-gutter--edited-lines))
+                  (>= (overlay-start (car (last ovs)))
+                      (car git-gutter--edited-lines)))))))
+
 (defun git-gutter:put-signs (sign points &optional wrap-sign)
-  "Put SIGN at each position in POINTS.
+  "Put SIGN at each position in POINTS, and return the overlays.
 When `git-gutter:visual-line' is non-nil, continuation rows show WRAP-SIGN,
 or SIGN if WRAP-SIGN is nil.  An overlay from `git-gutter--old-overlays'
 that already shows the same sign at the same position is kept unchanged."
@@ -589,7 +671,8 @@ that already shows the same sign at the same position is kept unchanged."
         (priority (when (string-match-p "\\S-" (substring-no-properties sign))
                     10))
         (wrap-sign (or wrap-sign sign))
-        (sign-key (git-gutter--sign-key sign)))
+        (sign-key (git-gutter--sign-key sign))
+        overlays)
     (dolist (pos points)
       (let* ((eol (when git-gutter:visual-line
                     (save-excursion (goto-char pos) (line-end-position))))
@@ -609,7 +692,44 @@ that already shows the same sign at the same position is kept unchanged."
           (overlay-put ov 'wrap-prefix
                        (when eol (git-gutter:wrap-prefix-for-sign wrap-sign pos)))
           (overlay-put ov 'git-gutter-key key))
-        (overlay-put ov 'git-gutter t)))))
+        (overlay-put ov 'git-gutter t)
+        (push ov overlays)))
+    (nreverse overlays)))
+
+(defun git-gutter--signs-key (sign &optional wrap-sign)
+  (list (git-gutter--sign-key sign)
+        (when wrap-sign (git-gutter--sign-key wrap-sign))
+        git-gutter:visual-line))
+
+(defun git-gutter--put-group (sign lines &optional wrap-sign key)
+  "Put SIGN on LINES lines from point, and move to the line after them.
+Keep the old group that starts at point if it shows the same signs on
+the same number of lines and no text in them was edited.  A non-nil
+WRAP-SIGN marks a deleted hunk: one sign, see `git-gutter:put-signs'.
+KEY is `git-gutter--signs-key' of SIGN and WRAP-SIGN, or nil to compute it."
+  (let ((key (or key (git-gutter--signs-key sign wrap-sign)))
+        (old (git-gutter--take-group (point))))
+    (if (and old
+             (equal (git-gutter--group-key old) key)
+             (= (git-gutter--group-lines old) lines)
+             (not (git-gutter--group-edited-p old)))
+        (progn
+          (push old git-gutter--new-groups)
+          (forward-line lines))
+      (when old
+        (git-gutter--release-group old))
+      (let (points)
+        (if wrap-sign
+            (progn (push (point) points) (forward-line 1))
+          (dotimes (_ lines)
+            (unless (eobp)
+              (push (point) points)
+              (forward-line 1))))
+        (when points
+          (let ((overlays (git-gutter:put-signs sign (nreverse points) wrap-sign)))
+            (when git-gutter--old-groups
+              (push (git-gutter--make-group key lines overlays)
+                    git-gutter--new-groups))))))))
 
 (defsubst git-gutter:sign-width (sign)
   (cl-loop for s across sign
@@ -656,20 +776,16 @@ Returns list of (start-line . end-line) pairs for unchanged regions."
 Without `git-gutter:unchanged-sign', put a blank, which is followed by
 `git-gutter:separator-sign'."
   (save-excursion
-    (let ((sign (git-gutter:propertized-unchanged-sign))
-          (max-line (line-number-at-pos (point-max)))
-          (line 1)
-          points)
+    (let* ((sign (git-gutter:propertized-unchanged-sign))
+           (key (git-gutter--signs-key sign))
+           (max-line (line-number-at-pos (point-max)))
+           (line 1))
       (goto-char (point-min))
       (dolist (range (git-gutter:build-unchanged-ranges diffinfos max-line))
         ;; Move from the end of the previous range, not from `point-min'.
         (forward-line (- (car range) line))
-        (setq line (car range))
-        (while (and (<= line (cdr range)) (not (eobp)))
-          (push (point) points)
-          (forward-line 1)
-          (setq line (1+ line))))
-      (git-gutter:put-signs sign points))))
+        (git-gutter--put-group sign (1+ (- (cdr range) (car range))) nil key)
+        (setq line (1+ (cdr range)))))))
 
 (defsubst git-gutter:check-file-and-directory ()
   (and (git-gutter:base-file)
@@ -727,6 +843,7 @@ Use `display-line-numbers-mode' instead."
             (make-local-variable 'git-gutter:diffinfos)
             ;;(setq-local git-gutter:start-revision nil)
             (add-hook 'kill-buffer-hook 'git-gutter:kill-buffer-hook nil t)
+            (add-hook 'after-change-functions #'git-gutter--after-change nil t)
             (add-hook 'window-buffer-change-functions
                       #'git-gutter:window-buffer-change-function nil t)
             (add-hook 'window-selection-change-functions
@@ -744,6 +861,8 @@ Use `display-line-numbers-mode' instead."
         (git-gutter-mode -1))
     (git-gutter:clear-live-update-cache)
     (remove-hook 'kill-buffer-hook 'git-gutter:kill-buffer-hook t)
+    (remove-hook 'after-change-functions #'git-gutter--after-change t)
+    (git-gutter--set-edited t)
     (dolist (hook git-gutter:update-hooks)
       (remove-hook hook 'git-gutter t))
     (remove-hook 'window-buffer-change-functions
@@ -775,45 +894,67 @@ Use `display-line-numbers-mode' instead."
   (save-excursion
     (goto-char (point-min))
     (cl-loop with curline = 1
+             ;; (TYPE SIGN WRAP-SIGN KEY) for each type met so far.
+             with signs = nil
              for info in diffinfos
              for start-line = (git-gutter-hunk-start-line info)
              for end-line = (git-gutter-hunk-end-line info)
              for type = (git-gutter-hunk-type info)
-             for sign = (git-gutter:propertized-sign type)
-             for points = nil
+             for (sign wrap-sign key)
+             = (or (cdr (assq type signs))
+                   (let* ((sign (git-gutter:propertized-sign type))
+                          ;; The line of a deleted hunk is unchanged; mark
+                          ;; only its first row.
+                          (wrap-sign (when (eq type 'deleted)
+                                       (git-gutter:propertized-unchanged-sign)))
+                          (entry (list sign wrap-sign
+                                       (git-gutter--signs-key sign wrap-sign))))
+                     (push (cons type entry) signs)
+                     entry))
              do
-             (let ((bound (progn
-                            (forward-line (- end-line curline))
-                            (line-end-position))))
-               (forward-line (- start-line end-line))
-               (cl-case type
-                 ((modified added staged)
-                  (while (and (<= (point) bound) (not (eobp)))
-                    (push (point) points)
-                    (forward-line 1))
-                  (git-gutter:put-signs sign points))
-                 (deleted
-                  ;; The line itself is unchanged; mark only its first row.
-                  (git-gutter:put-signs sign (list (point))
-                                        (git-gutter:propertized-unchanged-sign))
-                  (forward-line 1)))
-               (setq curline (1+ end-line))))))
+             (forward-line (- start-line curline))
+             (git-gutter--put-group sign (if wrap-sign 1 (1+ (- end-line start-line)))
+                                    wrap-sign key)
+             (setq curline (1+ end-line)))))
 
 (defsubst git-gutter:reset-window-margin-p ()
   (or git-gutter:hide-gutter (not global-git-gutter-mode)))
 
 (defun git-gutter:view-diff-infos (diffinfos)
   "Show the signs for DIFFINFOS.
-Keep the sign overlays that still show the right sign, and delete the
-others."
-  (let ((git-gutter--old-overlays (make-hash-table)))
-    (dolist (ov (overlays-in (point-min) (point-max)))
-      (when (overlay-get ov 'git-gutter)
-        (push ov (gethash (overlay-start ov) git-gutter--old-overlays))))
+Skip the hunks whose signs are still right, keep the sign overlays that
+still show the right sign, and delete the others."
+  (let ((git-gutter--old-groups (make-hash-table))
+        (git-gutter--old-overlays (make-hash-table))
+        (git-gutter--new-groups nil)
+        (git-gutter--edited-lines nil))
+    ;; Edits in an indirect buffer do not run this buffer's
+    ;; `after-change-functions'.
+    (unless (and (memq #'git-gutter--after-change after-change-functions)
+                 (not (buffer-base-buffer))
+                 (not git-gutter:has-indirect-buffers))
+      (git-gutter--set-edited t))
+    (setq git-gutter--edited-lines (git-gutter--edited-lines))
+    (if (eq git-gutter--edited-lines t)
+        ;; No group can be kept.  Collect every sign overlay, also those
+        ;; in no group, for example from before the package was reloaded.
+        (dolist (ov (overlays-in (point-min) (point-max)))
+          (when (overlay-get ov 'git-gutter)
+            (push ov (gethash (overlay-start ov) git-gutter--old-overlays))))
+      (dolist (group git-gutter--groups)
+        (let ((first (car (git-gutter--group-overlays group))))
+          (if (and (overlay-buffer first)
+                   (not (gethash (overlay-start first) git-gutter--old-groups)))
+              (puthash (overlay-start first) group git-gutter--old-groups)
+            (git-gutter--release-group group)))))
     (when (or diffinfos git-gutter:always-show-separator)
       (git-gutter:view-set-overlays diffinfos))
+    (maphash (lambda (_pos group) (mapc #'delete-overlay (git-gutter--group-overlays group)))
+             git-gutter--old-groups)
     (maphash (lambda (_pos ovs) (mapc #'delete-overlay ovs))
-             git-gutter--old-overlays))
+             git-gutter--old-overlays)
+    (setq git-gutter--groups git-gutter--new-groups)
+    (git-gutter--set-edited nil))
   (if (git-gutter:show-gutter-p diffinfos)
       (git-gutter:set-window-margin (git-gutter:window-margin))
     (when (git-gutter:reset-window-margin-p)
@@ -822,7 +963,8 @@ others."
 (defun git-gutter:clear-diff-infos ()
   (when (git-gutter:reset-window-margin-p)
     (git-gutter:set-window-margin 0))
-  (remove-overlays (point-min) (point-max) 'git-gutter t))
+  (remove-overlays (point-min) (point-max) 'git-gutter t)
+  (setq git-gutter--groups nil))
 
 (defun git-gutter--reset-state ()
   (setq git-gutter:enabled nil
@@ -1102,6 +1244,9 @@ others."
   ;; The index or the commit may have changed since live update last read
   ;; the original version.
   (git-gutter:clear-live-update-cache)
+  ;; Draw every sign again: a `wrap-prefix' that a sign overlay copied
+  ;; may have changed without an edit.
+  (git-gutter--set-edited t)
   (when (or git-gutter:vcs-type (git-gutter:in-repository-p))
     (let* ((file (git-gutter:base-file))
            (proc-buf (git-gutter:diff-process-buffer file)))

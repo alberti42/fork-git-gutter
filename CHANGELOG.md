@@ -19,8 +19,9 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
 - The signs flickered on every update, for example while typing with
   `git-gutter:update-interval` set, because each update removed all
   signs and drew them again. An update now changes only the signs that
-  changed, when `git-gutter:view-diff-function` and
-  `git-gutter:clear-function` have their default values.
+  changed, and skips the hunks in which no text was edited, when
+  `git-gutter:view-diff-function` and `git-gutter:clear-function` have
+  their default values.
 
 ## [0.94.0] - 2026-09-23
 
