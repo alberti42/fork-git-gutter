@@ -241,6 +241,9 @@ Can be a directory-local variable in your project.")
 (defvar git-gutter:revision-history nil)
 (defvar git-gutter:update-timer nil)
 (defvar-local git-gutter:last-chars-modified-tick nil)
+(defvar git-gutter--live-update-files nil
+  "Copies of buffers that a running live update's diff reads.")
+
 (defvar-local git-gutter--last-update 0
   "Number of the last update started in the current buffer.
 Each full or live update takes the next number when it starts, and shows
@@ -851,6 +854,7 @@ Use `display-line-numbers-mode' instead."
             (make-local-variable 'git-gutter:diffinfos)
             ;;(setq-local git-gutter:start-revision nil)
             (add-hook 'kill-buffer-hook 'git-gutter:kill-buffer-hook nil t)
+            (add-hook 'kill-emacs-hook #'git-gutter--delete-temp-files)
             (add-hook 'after-change-functions #'git-gutter--after-change nil t)
             (add-hook 'window-buffer-change-functions
                       #'git-gutter:window-buffer-change-function nil t)
@@ -1432,7 +1436,9 @@ start revision."
                  (setq git-gutter:enabled t))))
            (when (buffer-live-p proc-buf)
              (kill-buffer proc-buf))
-           (delete-file now)))))))
+           (delete-file now)
+           (setq git-gutter--live-update-files
+                 (delete now git-gutter--live-update-files))))))))
 
 (defun git-gutter:should-update-p ()
   (let ((chars-modified-tick (buffer-chars-modified-tick)))
@@ -1466,6 +1472,19 @@ start revision."
       (delete-file original)))
   (setq git-gutter:live-update-cache nil))
 
+(defun git-gutter--delete-temp-files ()
+  "Delete the temporary files of live update in every buffer.
+`kill-emacs' runs no `kill-buffer-hook' and no process sentinels, so
+this function in `kill-emacs-hook' deletes the files that they would."
+  (dolist (buf (buffer-list))
+    (with-current-buffer buf
+      (when git-gutter:live-update-cache
+        (git-gutter:clear-live-update-cache))))
+  (dolist (file git-gutter--live-update-files)
+    (when (file-exists-p file)
+      (delete-file file)))
+  (setq git-gutter--live-update-files nil))
+
 (defun git-gutter:live-update-cache (file)
   "Return `git-gutter:live-update-cache' for FILE, filling it if empty.
 Filling it runs the version control system twice, synchronously: once
@@ -1489,6 +1508,7 @@ for the repository root and once for the original version of FILE."
                (git-gutter:should-update-p))
       (git-gutter:awhen (cdr (git-gutter:live-update-cache it))
         (let ((now (make-temp-file "git-gutter-cur")))
+          (push now git-gutter--live-update-files)
           (git-gutter:write-current-content now)
           (git-gutter:start-live-update (file-name-nondirectory (git-gutter:base-file))
                                         it now))))))

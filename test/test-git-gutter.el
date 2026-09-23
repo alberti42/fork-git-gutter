@@ -932,6 +932,30 @@ on."
           (set-buffer-modified-p nil))
       (delete-directory temporary-file-directory t))))
 
+(ert-deftest git-gutter:kill-emacs-deletes-temp-files ()
+  "`kill-emacs-hook' deletes the cached original and running copies."
+  (git-gutter-test:with-file-in-repo
+    (should (memq #'git-gutter--delete-temp-files kill-emacs-hook))
+    (git-gutter-test:live-update-and-wait)
+    (let ((original (cdr git-gutter:live-update-cache)))
+      (should (file-exists-p original))
+      ;; Start a live update and do not wait for its diff.
+      (insert "y")
+      (git-gutter:live-update)
+      (let ((now (car git-gutter--live-update-files)))
+        (should (file-exists-p now))
+        (git-gutter--delete-temp-files)
+        (should-not (file-exists-p original))
+        (should-not (file-exists-p now))
+        (should-not git-gutter:live-update-cache)
+        (should-not git-gutter--live-update-files)))
+    ;; The diff fails without its files; its sentinel must not signal.
+    (with-timeout (10 (error "live update did not finish"))
+      (while (get-buffer (git-gutter:diff-process-buffer
+                          (file-name-nondirectory (git-gutter:base-file))))
+        (accept-process-output nil 0.1)))
+    (set-buffer-modified-p nil)))
+
 (ert-deftest git-gutter:write-current-content-coding ()
   "The current content is written in `buffer-file-coding-system'."
   (let ((file (make-temp-file "git-gutter-test")))

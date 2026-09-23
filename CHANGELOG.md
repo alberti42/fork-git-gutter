@@ -22,6 +22,9 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
 - A live update that started while the previous one was still running
   stopped it, and the stopped one left its copy of the buffer in the
   temporary directory. It now deletes that copy.
+- Exiting Emacs left live update's temporary files: the original
+  version of each buffer and the copy of a buffer whose `diff` was
+  still running. `kill-emacs-hook` now deletes them.
 
 ## [0.94.1] - 2026-09-23
 
