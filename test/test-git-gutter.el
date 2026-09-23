@@ -525,4 +525,21 @@ on."
                            staged)
                    '((staged 5 6) (staged 9 10))))))
 
+(ert-deftest git-gutter:staged-hunk-commands ()
+  "Hunk commands leave a staged hunk alone; statistics skip it."
+  (with-temp-buffer
+    (insert "1\n2\n3\n")
+    (setq-local git-gutter:diffinfos
+                (list (make-git-gutter-hunk :type 'staged :content "@@ -2 +2 @@\n-two\n+2"
+                                            :start-line 2 :end-line 2)))
+    (goto-char (point-min))
+    (forward-line 1)
+    (let ((git-gutter:ask-p nil)
+          (called nil))
+      (should (equal (git-gutter:query-action
+                      "Revert" (lambda (_) (setq called t)) #'ignore)
+                     "Hunk is already staged"))
+      (should-not called))
+    (should (equal (git-gutter:statistic) '(0 . 0)))))
+
 ;;; test-git-gutter.el end here

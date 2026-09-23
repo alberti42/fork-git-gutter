@@ -818,16 +818,18 @@ Use `display-line-numbers-mode' instead."
 
 (defun git-gutter:query-action (action action-fn update-fn)
   (git-gutter:awhen (git-gutter:search-here-diffinfo git-gutter:diffinfos)
-    (save-window-excursion
-      (when git-gutter:ask-p
-        (git-gutter:popup-hunk it))
-      (when (or (not git-gutter:ask-p)
-                (yes-or-no-p (format "%s current hunk? " action)))
-        (funcall action-fn it)
-        (funcall update-fn))
-      (if git-gutter:ask-p
-          (delete-window (git-gutter:popup-buffer-window))
-        (message "%s current hunk." action)))))
+    (if (eq (git-gutter-hunk-type it) 'staged)
+        (message "Hunk is already staged")
+      (save-window-excursion
+        (when git-gutter:ask-p
+          (git-gutter:popup-hunk it))
+        (when (or (not git-gutter:ask-p)
+                  (yes-or-no-p (format "%s current hunk? " action)))
+          (funcall action-fn it)
+          (funcall update-fn))
+        (if git-gutter:ask-p
+            (delete-window (git-gutter:popup-buffer-window))
+          (message "%s current hunk." action))))))
 
 (defun git-gutter:revert-hunk ()
   "Revert current hunk."
@@ -1232,7 +1234,8 @@ start revision."
 (defun git-gutter:statistic ()
   "Return statistic unstaged hunks in current buffer."
   (interactive)
-  (cl-loop for hunk in git-gutter:diffinfos
+  (cl-loop for hunk in (cl-remove 'staged git-gutter:diffinfos
+                                  :key #'git-gutter-hunk-type)
            for (add . del) = (git-gutter:stat-hunk hunk)
            sum add into added
            sum del into deleted
