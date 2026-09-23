@@ -331,6 +331,11 @@ bar
         (unwind-protect
             (with-current-buffer buf
               (git-gutter-mode 1)
+              ;; Wait for the diff process: on Windows, a running process
+              ;; keeps the temporary directory from being deleted.
+              (with-timeout (10 (error "git-gutter did not finish"))
+                (while (not git-gutter:enabled)
+                  (accept-process-output nil 0.1)))
               ,@body)
           (kill-buffer buf))))))
 
@@ -361,8 +366,12 @@ bar
   (git-gutter-test:with-file-in-repo
     (save-window-excursion
       (switch-to-buffer (current-buffer))
-      (let ((selected (selected-window))
-            (other (split-window-right)))
+      (let* ((selected (selected-window))
+             ;; The batch frame of Emacs 27 is too small to split with the
+             ;; default minimum window size.
+             (other (let ((window-min-width 1)
+                          (window-min-height 1))
+                      (split-window-right))))
         (set-window-buffer other (current-buffer))
         (should (= 1 (git-gutter-test:count-git-gutter-calls
                        (git-gutter:window-selection-change-function selected))))
