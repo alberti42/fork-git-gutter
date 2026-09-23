@@ -45,7 +45,6 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
 - With `git-gutter:visual-line`, the signs are drawn on the continuation
   rows of a wrapped line with a `wrap-prefix`, instead of one overlay per
   visual row ([#248](https://github.com/emacsorphanage/git-gutter/pull/248)).
-
 - Live update (`git-gutter:update-interval` above 0) reads the original
   version of the file once, and again after each full update, instead of
   on every update; Emacs waits 4.4 ms per live update on a 2000-line
