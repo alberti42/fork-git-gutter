@@ -49,27 +49,27 @@ character for signs of changes"
   :group 'git-gutter)
 
 (defcustom git-gutter:diff-option ""
-  "Option of 'git diff'."
+  "Option of `git diff\'."
   :type 'string
   :group 'git-gutter)
 
 (defcustom git-gutter:subversion-diff-option ""
-  "Option of 'svn diff'."
+  "Option of `svn diff\'."
   :type 'string
   :group 'git-gutter)
 
 (defcustom git-gutter:mercurial-diff-option ""
-  "Option of 'hg diff'."
+  "Option of `hg diff\'."
   :type 'string
   :group 'git-gutter)
 
 (defcustom git-gutter:bazaar-diff-option ""
-  "Option of 'bzr diff'."
+  "Option of `bzr diff\'."
   :type 'string
   :group 'git-gutter)
 
 (defcustom git-gutter:jj-diff-option ""
-  "Option of 'jj diff'."
+  "Option of `jj diff\'."
   :type 'string
   :group 'git-gutter)
 
@@ -922,7 +922,7 @@ Use `display-line-numbers-mode' instead."
       (delete-file patch))))
 
 (defun git-gutter:stage-hunk ()
-  "Stage this hunk like 'git add -p'."
+  "Stage this hunk like `git add -p'."
   (interactive)
   (git-gutter:query-action "Stage" #'git-gutter:do-stage-hunk #'git-gutter))
 
