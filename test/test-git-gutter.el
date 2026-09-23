@@ -886,6 +886,28 @@ on."
     (should (equal (buffer-string) "1\n2\nx3\n4\n5\n"))
     (set-buffer-modified-p nil)))
 
+(ert-deftest git-gutter:late-full-update-ignored ()
+  "A full update that finishes after a later live update is ignored."
+  (git-gutter-test:with-file-in-repo
+    (cl-letf (((symbol-function 'git-gutter:start-diff-process1)
+               ;; A diff that finishes after 1 s with a hunk for lines 1-2.
+               (lambda (_file proc-buf)
+                 (start-file-process
+                  "git-gutter" proc-buf
+                  (expand-file-name invocation-name invocation-directory)
+                  "-Q" "--batch" "--eval"
+                  "(progn (sleep-for 1) (princ \"@@ -1 +1,2 @@\\n\"))"))))
+      (git-gutter)
+      (git-gutter-test:live-update-and-wait)
+      (git-gutter-test:wait-for-full-update))
+    (should (equal (mapcar (lambda (hunk)
+                             (list (git-gutter-hunk-type hunk)
+                                   (git-gutter-hunk-start-line hunk)
+                                   (git-gutter-hunk-end-line hunk)))
+                           git-gutter:diffinfos)
+                   '((modified 1 1))))
+    (set-buffer-modified-p nil)))
+
 (ert-deftest git-gutter:write-current-content-coding ()
   "The current content is written in `buffer-file-coding-system'."
   (let ((file (make-temp-file "git-gutter-test")))

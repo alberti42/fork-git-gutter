@@ -241,6 +241,10 @@ Can be a directory-local variable in your project.")
 (defvar git-gutter:revision-history nil)
 (defvar git-gutter:update-timer nil)
 (defvar-local git-gutter:last-chars-modified-tick nil)
+(defvar-local git-gutter--last-update 0
+  "Number of the last update started in the current buffer.
+Each full or live update takes the next number when it starts, and shows
+its result only if no other update has started since.")
 (defvar-local git-gutter:live-update-cache nil
   "Cons (ROOT . ORIGINAL) that live update reuses, or nil.
 ROOT is the true name of the repository root.  ORIGINAL is a temporary
@@ -441,18 +445,20 @@ Argument TEST is the case before BODY execution."
 (defun git-gutter:start-diff-process (curfile proc-buf)
   (if (git-gutter:show-staged-p)
       (git-gutter:start-combined-git-diff-process curfile proc-buf)
-    (let ((file (git-gutter:base-file))
-          (curbuf (current-buffer))
-          (process (git-gutter:start-diff-process1 curfile proc-buf)))
+    (let* ((file (git-gutter:base-file))
+           (curbuf (current-buffer))
+           (update (cl-incf git-gutter--last-update))
+           (process (git-gutter:start-diff-process1 curfile proc-buf)))
       (set-process-query-on-exit-flag process nil)
       (set-process-sentinel
        process
        (lambda (proc _event)
          (when (eq (process-status proc) 'exit)
-           (setq git-gutter:enabled nil)
            (let ((diffinfos (git-gutter:process-diff-output (process-buffer proc))))
-             (when (buffer-live-p curbuf)
+             (when (and (buffer-live-p curbuf)
+                        (= update (buffer-local-value 'git-gutter--last-update curbuf)))
                (with-current-buffer curbuf
+                 (setq git-gutter:enabled nil)
                  (git-gutter:update-diffinfo diffinfos)
                  (when git-gutter:has-indirect-buffers
                    (git-gutter:update-indirect-buffers file))
@@ -493,6 +499,7 @@ PROC-BUF stays alive until both processes finish, so that `git-gutter'
 does not start another pair of processes meanwhile."
   (let* ((file (git-gutter:base-file))
          (curbuf (current-buffer))
+         (update (cl-incf git-gutter--last-update))
          (unstaged-buf (get-buffer-create (concat (buffer-name proc-buf) "-unstaged")))
          (head-buf (get-buffer-create (concat (buffer-name proc-buf) "-head")))
          (unstaged :pending)
@@ -500,7 +507,8 @@ does not start another pair of processes meanwhile."
          (finish
           (lambda ()
             (unless (or (eq unstaged :pending) (eq head :pending))
-              (when (buffer-live-p curbuf)
+              (when (and (buffer-live-p curbuf)
+                         (= update (buffer-local-value 'git-gutter--last-update curbuf)))
                 (with-current-buffer curbuf
                   (setq git-gutter:enabled nil)
                   (git-gutter:update-diffinfo
@@ -1401,6 +1409,7 @@ start revision."
     (when (get-buffer proc-bufname)
       (kill-buffer proc-bufname))
     (let* ((curbuf (current-buffer))
+           (update (cl-incf git-gutter--last-update))
            (proc-buf (get-buffer-create proc-bufname))
            (process (git-gutter:start-raw-diff-process proc-buf original now)))
       (set-process-query-on-exit-flag process nil)
@@ -1411,7 +1420,8 @@ start revision."
            ;; diff exits with 0 or 1; 2 means it failed, for example
            ;; because a temporary file is gone.  Keep the signs then.
            (when (and (<= (process-exit-status proc) 1)
-                      (buffer-live-p curbuf))
+                      (buffer-live-p curbuf)
+                      (= update (buffer-local-value 'git-gutter--last-update curbuf)))
              (let ((diffinfos (git-gutter:process-diff-output (process-buffer proc))))
                (with-current-buffer curbuf
                  (setq git-gutter:enabled nil)

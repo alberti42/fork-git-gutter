@@ -11,6 +11,13 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
 
 ## [Unreleased]
 
+### Fixed
+
+- A full update that finished after a later live update, for example
+  when `git diff` is slow after a save, replaced the live update's signs
+  with those of the saved file. The result of an update is now shown
+  only if no other update has started since.
+
 ## [0.94.1] - 2026-09-23
 
 ### Fixed
