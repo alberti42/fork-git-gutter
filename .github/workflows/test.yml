@@ -54,6 +54,13 @@ jobs:
       with:
         version: 'snapshot'
 
-    - name: Run tests
+    # Eask installs the latest package-build, which fails on Emacs 26.3
+    # with "Wrong number of arguments: (3 . 3), 2".
+    - name: Package and compile
+      if: matrix.emacs-version != '26.3'
       run:
         make ci
+
+    - name: Run tests
+      run:
+        make test
