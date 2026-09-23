@@ -908,6 +908,30 @@ on."
                    '((modified 1 1))))
     (set-buffer-modified-p nil)))
 
+(ert-deftest git-gutter:live-update-deletes-temp-file-when-killed ()
+  "A live update stopped by the next one deletes its copy of the buffer."
+  (let ((temporary-file-directory
+         (file-name-as-directory (make-temp-file "git-gutter-tmp" t))))
+    (unwind-protect
+        (git-gutter-test:with-file-in-repo
+          (goto-char (point-min))
+          (insert "x")
+          (git-gutter:live-update)
+          ;; The first live update's diff is still running: the second
+          ;; one kills it.
+          (insert "y")
+          (git-gutter-test:live-update-and-wait)
+          (with-timeout (10 (error "the killed diff was not cleaned up"))
+            (while (> (length (directory-files temporary-file-directory nil
+                                               "\\`git-gutter-cur"))
+                      0)
+              (accept-process-output nil 0.1)))
+          (should (equal (directory-files temporary-file-directory nil
+                                          "\\`git-gutter-cur")
+                         nil))
+          (set-buffer-modified-p nil))
+      (delete-directory temporary-file-directory t))))
+
 (ert-deftest git-gutter:write-current-content-coding ()
   "The current content is written in `buffer-file-coding-system'."
   (let ((file (make-temp-file "git-gutter-test")))

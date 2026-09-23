@@ -17,6 +17,9 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
   when `git diff` is slow after a save, replaced the live update's signs
   with those of the saved file. The result of an update is now shown
   only if no other update has started since.
+- A live update that started while the previous one was still running
+  stopped it, and the stopped one left its copy of the buffer in the
+  temporary directory. It now deletes that copy.
 
 ## [0.94.1] - 2026-09-23
 

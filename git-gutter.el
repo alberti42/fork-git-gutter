@@ -1416,10 +1416,13 @@ start revision."
       (set-process-sentinel
        process
        (lambda (proc _event)
-         (when (eq (process-status proc) 'exit)
+         ;; The process also ends when the next live update kills its
+         ;; buffer; delete the copy of the buffer then too.
+         (unless (process-live-p proc)
            ;; diff exits with 0 or 1; 2 means it failed, for example
            ;; because a temporary file is gone.  Keep the signs then.
-           (when (and (<= (process-exit-status proc) 1)
+           (when (and (eq (process-status proc) 'exit)
+                      (<= (process-exit-status proc) 1)
                       (buffer-live-p curbuf)
                       (= update (buffer-local-value 'git-gutter--last-update curbuf)))
              (let ((diffinfos (git-gutter:process-diff-output (process-buffer proc))))
@@ -1427,7 +1430,8 @@ start revision."
                  (setq git-gutter:enabled nil)
                  (git-gutter:update-diffinfo diffinfos)
                  (setq git-gutter:enabled t))))
-           (kill-buffer proc-buf)
+           (when (buffer-live-p proc-buf)
+             (kill-buffer proc-buf))
            (delete-file now)))))))
 
 (defun git-gutter:should-update-p ()
