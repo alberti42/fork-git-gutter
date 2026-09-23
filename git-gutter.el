@@ -1152,7 +1152,11 @@ start revision."
            (when (zerop (process-file command nil t nil "cat" file))
              (buffer-substring-no-properties (point-min) (point-max)))))
         (jj
-         (when (zerop (process-file "jj" nil t nil "file" "show" "-r" "@-"))
+         ;; FILE is relative to the repository root.  Reading @- does not
+         ;; need a snapshot of the working copy.
+         (when (zerop (process-file "jj" nil t nil "--ignore-working-copy"
+                                    "file" "show" "-r" "@-"
+                                    (format "root-file:%S" file)))
            (buffer-substring-no-properties (point-min) (point-max))))))))
 
 (defun git-gutter:write-original-content (tmpfile filename)
