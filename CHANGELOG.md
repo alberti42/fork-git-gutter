@@ -11,6 +11,8 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
 
 ## [Unreleased]
 
+## [0.94.0] - 2026-09-23
+
 ### Added
 
 - `git-gutter:popup-hunk-inline-at-point`, which shows the current hunk
@@ -104,4 +106,5 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
   `when-let`, obsolete since Emacs 31.1
   ([#236](https://github.com/emacsorphanage/git-gutter/pull/236)).
 
-[Unreleased]: https://github.com/alberti42/fork-git-gutter/compare/0.93...HEAD
+[Unreleased]: https://github.com/alberti42/fork-git-gutter/compare/0.94.0...HEAD
+[0.94.0]: https://github.com/alberti42/fork-git-gutter/compare/0.93...0.94.0

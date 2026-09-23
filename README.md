@@ -20,8 +20,9 @@ it shows as merged upstream once this work reaches the upstream
 repository. Fixes to a pull request are separate commits after the
 author's.
 
-The changes since 0.93, including the pull requests merged so far, are
-listed in [CHANGELOG.md](CHANGELOG.md). The next release will be 0.94.0.
+The changes, including the pull requests merged so far, are listed in
+[CHANGELOG.md](CHANGELOG.md). The first release from this fork is
+0.94.0.
 
 ### Versioning
 
