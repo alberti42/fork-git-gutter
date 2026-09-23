@@ -78,6 +78,11 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
 - Killing an indirect buffer whose base buffer no longer exists, or a
   clone of an indirect buffer, signalled `wrong-type-argument`
   ([#240](https://github.com/emacsorphanage/git-gutter/pull/240)).
+- With `git-gutter:unchanged-sign` or `git-gutter:separator-sign` set,
+  updating the signs took time proportional to the square of the number
+  of lines: 1.5 s for a 20000-line file with one hunk, 20.4 s with 2000
+  hunks. It now takes 0.04 s and 0.05 s
+  ([#243](https://github.com/emacsorphanage/git-gutter/pull/243)).
 - Byte-compilation warnings: missing `lexical-binding` cookie, and
   `when-let`, obsolete since Emacs 31.1
   ([#236](https://github.com/emacsorphanage/git-gutter/pull/236)).

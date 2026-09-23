@@ -37,9 +37,6 @@ and faces, the variables `git-gutter:view-diff-function`,
 
 ### Still open
 
-- [#243](https://github.com/emacsorphanage/git-gutter/pull/243): faster
-  `git-gutter:view-for-unchanged`. It conflicts with #248 and hides the
-  separator on unchanged lines.
 - [#244](https://github.com/emacsorphanage/git-gutter/pull/244): support
   for jj. The new test does not parse, and live update does not work yet.
 - [#241](https://github.com/emacsorphanage/git-gutter/pull/241): a sign
