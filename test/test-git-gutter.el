@@ -855,6 +855,43 @@ on."
         (should (= shows 2)))
       (set-buffer-modified-p nil))))
 
+(ert-deftest git-gutter:live-update-narrowed ()
+  "Live update diffs the whole buffer, also when it is narrowed."
+  (git-gutter-test:with-file-in-repo
+    (let ((inhibit-read-only t))
+      (erase-buffer)
+      (insert "1\n2\n3\n4\n5\n")
+      (save-buffer))
+    (git-gutter-test:git "commit" "-q" "-a" "-m" "five lines")
+    (goto-char (point-min))
+    (forward-line 2)
+    (narrow-to-region (point) (progn (forward-line 2) (point)))
+    (git-gutter-test:live-update-and-wait)
+    (should (equal (mapcar (lambda (hunk)
+                             (list (git-gutter-hunk-type hunk)
+                                   (git-gutter-hunk-start-line hunk)
+                                   (git-gutter-hunk-end-line hunk)))
+                           git-gutter:diffinfos)
+                   '((modified 3 3))))
+    (widen)
+    (should (equal (buffer-string) "1\n2\nx3\n4\n5\n"))
+    (set-buffer-modified-p nil)))
+
+(ert-deftest git-gutter:write-current-content-coding ()
+  "The current content is written in `buffer-file-coding-system'."
+  (let ((file (make-temp-file "git-gutter-test")))
+    (unwind-protect
+        (with-temp-buffer
+          (setq buffer-file-coding-system 'iso-latin-1-unix)
+          (insert "\u00e9\n\u6f22\n")
+          (git-gutter:write-current-content file)
+          (should (equal (with-temp-buffer
+                           (set-buffer-multibyte nil)
+                           (insert-file-contents-literally file)
+                           (buffer-string))
+                         "\351\n \n")))
+      (delete-file file))))
+
 (ert-deftest git-gutter:live-update-cache-deleted-on-kill ()
   "Killing the buffer deletes the cached original version."
   (let (original)

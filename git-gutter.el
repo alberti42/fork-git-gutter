@@ -1352,11 +1352,17 @@ start revision."
   (setq git-gutter:update-timer nil))
 
 (defsubst git-gutter:write-current-content (tmpfile)
-  (let ((content (buffer-substring-no-properties (point-min) (point-max)))
-        (coding buffer-file-coding-system))
-    (with-temp-file tmpfile
-      (setq buffer-file-coding-system coding)
-      (insert content))))
+  "Write the whole buffer to TMPFILE, also when it is narrowed."
+  ;; `write-region' with START nil ignores the narrowing.  Writing from
+  ;; the buffer copies no string.  With `coding-system-for-write' bound, a
+  ;; character that `buffer-file-coding-system' cannot encode changes only
+  ;; its own line; without it, Emacs may write the whole file in another
+  ;; coding system, and every line with a non-ASCII character differs.
+  (let ((coding-system-for-write buffer-file-coding-system)
+        (buffer-file-format nil)
+        (write-region-annotate-functions nil)
+        (write-region-inhibit-fsync t))
+    (write-region nil nil tmpfile nil 'silent)))
 
 (defun git-gutter:original-file-content (file vcs)
   (let ((coding-system-for-read (coding-system-base buffer-file-coding-system)))

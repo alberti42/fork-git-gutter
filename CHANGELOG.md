@@ -22,6 +22,12 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
   changed, and skips the hunks in which no text was edited, when
   `git-gutter:view-diff-function` and `git-gutter:clear-function` have
   their default values.
+- In a narrowed buffer, live update compared only the visible part with
+  the original version, so the lines outside it showed as deleted and
+  the signs were on the wrong lines. It now writes the whole buffer.
+- Live update wrote the buffer in another coding system when the buffer
+  had a character that `buffer-file-coding-system` cannot encode, so
+  every line with a non-ASCII character showed as changed.
 
 ## [0.94.0] - 2026-09-23
 
