@@ -901,15 +901,14 @@ or SIGN if WRAP-SIGN is nil."
 (defun git-gutter:popup-hunk-inline-at-point ()
   "Show hunk by temporarily expanding it at point"
   (interactive)
-  (-when-let (diffinfo (git-gutter:search-here-diffinfo git-gutter:diffinfos))
+  (when-let* ((diffinfo (git-gutter:search-here-diffinfo git-gutter:diffinfos)))
     (let ((diff (with-temp-buffer
                   (insert (git-gutter-hunk-content diffinfo) "\n")
                   (diff-mode)
                   ;; Force-fontify the invisible temp buffer
-                  (font-lock-default-function 'diff-mode)
-                  (font-lock-default-fontify-buffer)
+                  (font-lock-ensure)
                   (buffer-string))))
-      (momentary-string-display diff (point-at-bol)))))
+      (momentary-string-display diff (line-beginning-position)))))
 
 (defun git-gutter:next-hunk (arg)
   "Move to next diff hunk"
