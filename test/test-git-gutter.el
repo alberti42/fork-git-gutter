@@ -383,4 +383,40 @@ bar
       (should (= 0 (git-gutter-test:count-git-gutter-calls
                      (git-gutter:window-buffer-change-function (selected-window))))))))
 
+;; `git-gutter:view-for-unchanged' puts an overlay on every line outside
+;; the hunks: the unchanged sign, or a blank followed by the separator.
+
+(defun git-gutter-test:unchanged-overlay-lines (hunks)
+  "Lines 1..10 of a buffer that get an unchanged overlay for HUNKS."
+  (with-temp-buffer
+    (dotimes (i 10) (insert (format "%d\n" (1+ i))))
+    (git-gutter:view-for-unchanged
+     (mapcar (lambda (range)
+               (make-git-gutter-hunk :type 'modified :content ""
+                                     :start-line (car range)
+                                     :end-line (cdr range)))
+             hunks))
+    (sort (mapcar (lambda (ov) (line-number-at-pos (overlay-start ov)))
+                  (seq-filter (lambda (ov) (overlay-get ov 'git-gutter))
+                              (overlays-in (point-min) (point-max))))
+          #'<)))
+
+(ert-deftest git-gutter:view-for-unchanged-lines ()
+  "The unchanged sign goes on the lines outside the hunks."
+  (let ((git-gutter:unchanged-sign ".")
+        (git-gutter:separator-sign nil))
+    (should (equal (git-gutter-test:unchanged-overlay-lines '((3 . 4) (7 . 7)))
+                   '(1 2 5 6 8 9 10)))
+    (should (equal (git-gutter-test:unchanged-overlay-lines '((1 . 1) (10 . 10)))
+                   '(2 3 4 5 6 7 8 9)))
+    (should (equal (git-gutter-test:unchanged-overlay-lines nil)
+                   '(1 2 3 4 5 6 7 8 9 10)))))
+
+(ert-deftest git-gutter:view-for-unchanged-separator-only ()
+  "With only a separator, unchanged lines still get an overlay."
+  (let ((git-gutter:unchanged-sign nil)
+        (git-gutter:separator-sign "|"))
+    (should (equal (git-gutter-test:unchanged-overlay-lines '((3 . 4)))
+                   '(1 2 5 6 7 8 9 10)))))
+
 ;;; test-git-gutter.el end here

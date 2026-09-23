@@ -488,26 +488,24 @@ Returns list of (start-line . end-line) pairs for unchanged regions."
 
 (defun git-gutter:view-for-unchanged (diffinfos)
   "Optimized version that processes unchanged line ranges instead of individual lines."
-  (when git-gutter:unchanged-sign
-    (save-excursion
-      (let ((sign (propertize git-gutter:unchanged-sign
-                              'face 'git-gutter:unchanged))
-            (max-line (line-number-at-pos (point-max)))
-            points)
-        ;; Get unchanged ranges
-        (let ((unchanged-ranges (git-gutter:build-unchanged-ranges diffinfos max-line)))
-          ;; Process each unchanged range
-          (dolist (range unchanged-ranges)
-            (let ((start-line (car range))
-                  (end-line (cdr range)))
-              (goto-char (point-min))
-              (forward-line (1- start-line))
-              ;; Collect points for this range
-              (dotimes (i (1+ (- end-line start-line)))
-                (unless (eobp)
-                  (push (point) points)
-                  (forward-line 1))))))
-        (git-gutter:put-signs sign points)))))
+  (save-excursion
+    (let ((sign (git-gutter:propertized-unchanged-sign))
+          (max-line (line-number-at-pos (point-max)))
+          points)
+      ;; Get unchanged ranges
+      (let ((unchanged-ranges (git-gutter:build-unchanged-ranges diffinfos max-line)))
+        ;; Process each unchanged range
+        (dolist (range unchanged-ranges)
+          (let ((start-line (car range))
+                (end-line (cdr range)))
+            (goto-char (point-min))
+            (forward-line (1- start-line))
+            ;; Collect points for this range
+            (dotimes (i (1+ (- end-line start-line)))
+              (unless (eobp)
+                (push (point) points)
+                (forward-line 1))))))
+      (git-gutter:put-signs sign points))))
 
 (defsubst git-gutter:check-file-and-directory ()
   (and (git-gutter:base-file)
