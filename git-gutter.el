@@ -1294,25 +1294,19 @@ for the repository root and once for the original version of FILE."
   (length git-gutter:diffinfos))
 
 (defun git-gutter:stat-hunk (hunk)
-  (cl-case (git-gutter-hunk-type hunk)
-    (modified (with-temp-buffer
-                (insert (git-gutter-hunk-content hunk))
-                (goto-char (point-min))
-                (let ((added 0)
-                      (deleted 0))
-                  (while (not (eobp))
-                    (cond ((looking-at-p "\\+") (cl-incf added))
-                          ((looking-at-p "\\-") (cl-incf deleted)))
-                    (forward-line 1))
-                  (cons added deleted))))
-    (added (cons (- (git-gutter-hunk-end-line hunk)
-                    (git-gutter-hunk-start-line hunk))
-                 0))
-    (deleted (cons 0
-                   (- (git-gutter-hunk-end-line hunk)
-                      (git-gutter-hunk-start-line hunk))))))
+  "Return (ADDED . DELETED), the number of lines HUNK adds and deletes.
+Count the lines of the hunk's diff content that start with + and -."
+  (with-temp-buffer
+    (insert (git-gutter-hunk-content hunk))
+    (goto-char (point-min))
+    (let ((added 0)
+          (deleted 0))
+      (while (not (eobp))
+        (cond ((looking-at-p "\\+") (cl-incf added))
+              ((looking-at-p "-") (cl-incf deleted)))
+        (forward-line 1))
+      (cons added deleted))))
 
-;; FIXME: This does not work as advertised.
 (defun git-gutter:statistic ()
   "Return statistic unstaged hunks in current buffer."
   (interactive)

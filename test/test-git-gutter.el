@@ -660,6 +660,32 @@ on."
       (should-not git-gutter:update-timer)
       (should-error (git-gutter:start-update-timer) :type 'user-error))))
 
+(ert-deftest git-gutter:statistic-matches-git ()
+  "`git-gutter:statistic' counts the lines that `git diff --numstat' counts."
+  (with-temporary-directory
+   (lambda ()
+     (git-gutter-test:git "init" "-q")
+     (git-gutter-test:write-lines "f.txt" (mapcar #'number-to-string (number-sequence 1 10)))
+     (git-gutter-test:git "add" "f.txt")
+     (git-gutter-test:git "commit" "-q" "-m" "init")
+     ;; Delete lines 2-4, change line 6, add two lines after line 8.
+     (git-gutter-test:write-lines "f.txt" '("1" "5" "SIX" "7" "8" "new1" "new2" "9" "10"))
+     (let* ((numstat (split-string (git-gutter-test:git "diff" "--numstat" "f.txt")))
+            (expected (cons (string-to-number (nth 0 numstat))
+                            (string-to-number (nth 1 numstat))))
+            (buf (find-file-noselect (expand-file-name "f.txt"))))
+       (should (equal expected '(3 . 4)))
+       (unwind-protect
+           (with-current-buffer buf
+             (git-gutter-mode 1)
+             (with-timeout (10 (error "git-gutter did not finish"))
+               (while (not git-gutter:enabled)
+                 (accept-process-output nil 0.1)))
+             (should (equal (mapcar #'git-gutter-hunk-type git-gutter:diffinfos)
+                            '(deleted modified added)))
+             (should (equal (git-gutter:statistic) expected)))
+         (kill-buffer buf))))))
+
 ;; jj backend.  These tests need the jj program and skip without it,
 ;; unless GIT_GUTTER_TEST_REQUIRE_JJ is set, as in the CI jobs that
 ;; install jj; then a missing jj fails the tests.

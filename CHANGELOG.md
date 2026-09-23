@@ -11,6 +11,12 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
 
 ## [Unreleased]
 
+### Fixed
+
+- `git-gutter:statistic` counted one line too few for each added hunk
+  and no lines for deleted hunks. It now counts the lines that
+  `git diff --numstat` counts.
+
 ## [0.94.0] - 2026-09-23
 
 ### Added
