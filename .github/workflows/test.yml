@@ -42,6 +42,9 @@ jobs:
             emacs-version: 26.3
           - os: macos-latest
             emacs-version: 27.2
+          # setup-emacs-windows has no build of 31.1 (HTTP 404).
+          - os: windows-latest
+            emacs-version: 31.1
 
     steps:
     - uses: actions/checkout@v7
