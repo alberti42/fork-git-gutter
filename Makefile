@@ -3,8 +3,6 @@ SHELL := /usr/bin/env bash
 EMACS ?= emacs
 EASK ?= eask
 
-TEST-FILES := $(shell ls test/git-gutter-*.el)
-
 .PHONY: clean checkdoc lint install compile test
 
 ci: clean package install compile
@@ -31,4 +29,4 @@ lint:
 
 test:
 	@echo "Testing..."
-	$(EASK) exec ert-runner -L . $(LOAD-TEST-FILES) -t '!no-win' -t '!org'
+	$(EMACS) -Q --batch -L . -l test/test-git-gutter.el -f ert-run-tests-batch-and-exit
