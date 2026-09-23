@@ -13,7 +13,7 @@
 
 (source "gnu")
 
-(depends-on "emacs" "25.1")
+(depends-on "emacs" "27.1")
 
 (development
  (depends-on "elisp-lint")
