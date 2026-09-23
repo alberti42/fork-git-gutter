@@ -74,7 +74,7 @@ With straight.el:
 
 ## Screenshot
 
-![Screenshot of git-gutter.el](image/git-gutter1.png)
+![Screenshot of git-gutter.el](image/git-gutter2.png)
 
 
 ## Requirements
