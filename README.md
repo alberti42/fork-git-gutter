@@ -1,8 +1,89 @@
 # git-gutter.el
 
+<!-- This fork is not on MELPA; the MELPA badges refer to emacsorphanage/git-gutter.
 [![melpa badge][melpa-badge]][melpa-link]
 [![melpa stable badge][melpa-stable-badge]][melpa-stable-link]
+-->
 [![gh actions badge][gh-actions-badge]][gh-actions-link]
+
+## Status of this fork
+
+This repository is a fork of
+[emacsorphanage/git-gutter](https://github.com/emacsorphanage/git-gutter).
+The upstream repository is in the Emacs orphanage, and nobody merges its
+pull requests. In this fork I review the pull requests that are open
+upstream, merge the ones that work, and fix the CI. The goal is to become
+the maintainer of the upstream repository and to push this work there.
+
+Each pull request is merged with its author's commits unchanged, so that
+it shows as merged upstream once this work reaches the upstream
+repository. Fixes to a pull request are separate commits after the
+author's.
+
+### Merged pull requests
+
+| Pull request | Change |
+|:-------------|:-------|
+| [#248](https://github.com/emacsorphanage/git-gutter/pull/248) | Signs on the continuation rows of wrapped lines when `git-gutter:visual-line` is on |
+| [#247](https://github.com/emacsorphanage/git-gutter/pull/247) | Documentation for theming the gutter column background |
+| [#246](https://github.com/emacsorphanage/git-gutter/pull/246) | actions/checkout v6 (then v7 in a separate commit) |
+| [#240](https://github.com/emacsorphanage/git-gutter/pull/240) | Killing an indirect buffer whose base buffer is gone |
+| [#250](https://github.com/emacsorphanage/git-gutter/pull/250) | Staging hunks in a bare repository used through `GIT_DIR` and `GIT_WORK_TREE` |
+| [#210](https://github.com/emacsorphanage/git-gutter/pull/210) | Files whose encoding differs from the Emacs default |
+| [#230](https://github.com/emacsorphanage/git-gutter/pull/230) | `git-gutter:popup-hunk-inline-at-point`, which shows the hunk in the buffer |
+
+### CI
+
+Before, CI ran `make ci`, which packages and byte-compiles the package
+but does not run the tests, and `make test` did not work. CI now runs
+the ERT tests with Emacs 27.2, 28.2, 29.4, 30.2, 31.1 and snapshot on
+Linux, macOS and Windows. (macOS skips 27.2; Windows skips 31.1, which
+the Windows setup action cannot install.)
+
+Running the tests on Windows showed that `git-gutter:stage-hunk` failed
+when `core.autocrlf` is `true`, the default of Git for Windows: Emacs
+wrote the patch with CRLF line endings, and `git apply` rejected it.
+#210 writes the patch with Unix line endings.
+
+### Emacs 27.1 or higher
+
+The minimum Emacs version is now 27.1; it was 25.1. Since version 0.92
+(#232, April 2024), git-gutter calls `executable-find` with a second
+argument, REMOTE, which Emacs 27.1 added. On Emacs 26 every git call
+signals `wrong-number-of-arguments`, so git-gutter has not worked there
+since 0.92. Declaring 27.1 makes package.el refuse to install it on
+Emacs 26, instead of installing a version that fails.
+
+### Still open
+
+- [#235](https://github.com/emacsorphanage/git-gutter/pull/235): update
+  signs through `window-buffer-change-functions`. That hook needs Emacs
+  27.1, which is now the minimum; the pull request needs changes.
+- [#243](https://github.com/emacsorphanage/git-gutter/pull/243): faster
+  `git-gutter:view-for-unchanged`. It conflicts with #248 and hides the
+  separator on unchanged lines.
+- [#244](https://github.com/emacsorphanage/git-gutter/pull/244): support
+  for jj. The new test does not parse, and live update does not work yet.
+- [#241](https://github.com/emacsorphanage/git-gutter/pull/241): a sign
+  for staged changes. It places the signs by the line numbers of the
+  index instead of the buffer.
+
+### Installing this fork
+
+MELPA builds the upstream repository, so `M-x package-install` installs
+upstream's version. To use this fork with Emacs 29 or higher:
+
+```lisp
+(package-vc-install
+ '(git-gutter :url "https://github.com/alberti42/fork-git-gutter"))
+```
+
+With straight.el:
+
+```lisp
+(straight-use-package
+ '(git-gutter :host github :repo "alberti42/fork-git-gutter"))
+```
 
 ## Introduction
 
@@ -41,6 +122,9 @@
 
 
 ## Installation
+
+To install this fork, see [Installing this fork](#installing-this-fork).
+The instructions below install the upstream version.
 
 You can install `git-gutter.el` from [MELPA](http://melpa.org) with package.el
 (`M-x package-install git-gutter`), with [el-get](https://github.com/dimitri/el-get),
@@ -530,7 +614,7 @@ However git-gutter-plus updates diff information synchronously.
 
 [melpa-link]: http://melpa.org/#/git-gutter
 [melpa-stable-link]: http://stable.melpa.org/#/git-gutter
-[gh-actions-link]: https://github.com/emacsorphanage/git-gutter/actions
+[gh-actions-link]: https://github.com/alberti42/fork-git-gutter/actions
 [melpa-badge]: http://melpa.org/packages/git-gutter-badge.svg
 [melpa-stable-badge]: http://stable.melpa.org/packages/git-gutter-badge.svg
-[gh-actions-badge]: https://github.com/emacsorphanage/git-gutter/workflows/CI/badge.svg
+[gh-actions-badge]: https://github.com/alberti42/fork-git-gutter/actions/workflows/test.yml/badge.svg
