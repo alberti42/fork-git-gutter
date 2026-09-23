@@ -855,6 +855,12 @@ on."
         (should (= shows 2)))
       (set-buffer-modified-p nil))))
 
+(defun git-gutter-test:wait-for-full-update ()
+  "Wait until the diff process of `git-gutter' has finished."
+  (with-timeout (10 (error "git-gutter did not finish"))
+    (while (get-buffer (git-gutter:diff-process-buffer (git-gutter:base-file)))
+      (accept-process-output nil 0.1))))
+
 (ert-deftest git-gutter:live-update-narrowed ()
   "Live update diffs the whole buffer, also when it is narrowed."
   (git-gutter-test:with-file-in-repo
@@ -862,6 +868,9 @@ on."
       (erase-buffer)
       (insert "1\n2\n3\n4\n5\n")
       (save-buffer))
+    ;; `save-buffer' started a full update.  Its result would replace the
+    ;; live update's if it came later.
+    (git-gutter-test:wait-for-full-update)
     (git-gutter-test:git "commit" "-q" "-a" "-m" "five lines")
     (goto-char (point-min))
     (forward-line 2)
