@@ -426,21 +426,24 @@ preserved on wrapped rows."
   "Put SIGN at each position in POINTS.
 When `git-gutter:visual-line' is non-nil, continuation rows show WRAP-SIGN,
 or SIGN if WRAP-SIGN is nil."
-  (dolist (pos points)
-    (let* ((eol (when git-gutter:visual-line
-                  (save-excursion (goto-char pos) (line-end-position))))
-           ;; Span to eol so `wrap-prefix' fires on every continuation row.
-           (ov (make-overlay pos (or eol pos)))
-           (gutter-sign (git-gutter:before-string sign)))
-      (overlay-put ov 'before-string gutter-sign)
-      ;; Ensure changed signs win over separator/unchanged overlays.
-      (let ((raw (substring-no-properties sign)))
-        (when (string-match-p "\\S-" raw)
-          (overlay-put ov 'priority 10)))
-      (when eol
-        (overlay-put ov 'wrap-prefix
-                     (git-gutter:wrap-prefix-for-sign (or wrap-sign sign) pos)))
-      (overlay-put ov 'git-gutter t))))
+  ;; SIGN is the same for all POINTS: build its display string once, and
+  ;; let every overlay share it.
+  (let ((gutter-sign (git-gutter:before-string sign))
+        ;; Ensure changed signs win over separator/unchanged overlays.
+        (priority (string-match-p "\\S-" (substring-no-properties sign)))
+        (wrap-sign (or wrap-sign sign)))
+    (dolist (pos points)
+      (let* ((eol (when git-gutter:visual-line
+                    (save-excursion (goto-char pos) (line-end-position))))
+             ;; Span to eol so `wrap-prefix' fires on every continuation row.
+             (ov (make-overlay pos (or eol pos))))
+        (overlay-put ov 'before-string gutter-sign)
+        (when priority
+          (overlay-put ov 'priority 10))
+        (when eol
+          (overlay-put ov 'wrap-prefix
+                       (git-gutter:wrap-prefix-for-sign wrap-sign pos)))
+        (overlay-put ov 'git-gutter t)))))
 
 (defsubst git-gutter:sign-width (sign)
   (cl-loop for s across sign
