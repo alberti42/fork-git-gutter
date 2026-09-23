@@ -394,7 +394,9 @@ Argument TEST is the case before BODY execution."
     (when (git-gutter:revision-set-p)
       (push "--from" args)
       (push git-gutter:start-revision args))
-    (nreverse (cons file args))))
+    ;; jj reads a path as a fileset expression; quote it, so that names
+    ;; with spaces or parentheses are not parsed as fileset syntax.
+    (nreverse (cons (format "file:%S" file) args))))
 
 (defsubst git-gutter:start-jj-diff-process (file proc-buf)
   (let ((args (git-gutter:jj-diff-arguments file)))
