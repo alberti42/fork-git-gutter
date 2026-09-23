@@ -455,12 +455,6 @@ or SIGN if WRAP-SIGN is nil."
     (+ (apply #'max (mapcar 'git-gutter:sign-width signs))
        (git-gutter:sign-width git-gutter:separator-sign))))
 
-(defun git-gutter:unchanged-line-p (line diffinfos)
-  (cl-loop for info in diffinfos
-           for start = (git-gutter-hunk-start-line info)
-           for end = (git-gutter-hunk-end-line info)
-           never (and (>= line start) (<= line end))))
-
 (defun git-gutter:propertized-unchanged-sign ()
   (if git-gutter:unchanged-sign
       (propertize git-gutter:unchanged-sign 'face 'git-gutter:unchanged)
@@ -487,24 +481,23 @@ Returns list of (start-line . end-line) pairs for unchanged regions."
       (nreverse ranges))))
 
 (defun git-gutter:view-for-unchanged (diffinfos)
-  "Optimized version that processes unchanged line ranges instead of individual lines."
+  "Put the unchanged sign on every line outside the hunks in DIFFINFOS.
+Without `git-gutter:unchanged-sign', put a blank, which is followed by
+`git-gutter:separator-sign'."
   (save-excursion
     (let ((sign (git-gutter:propertized-unchanged-sign))
           (max-line (line-number-at-pos (point-max)))
+          (line 1)
           points)
-      ;; Get unchanged ranges
-      (let ((unchanged-ranges (git-gutter:build-unchanged-ranges diffinfos max-line)))
-        ;; Process each unchanged range
-        (dolist (range unchanged-ranges)
-          (let ((start-line (car range))
-                (end-line (cdr range)))
-            (goto-char (point-min))
-            (forward-line (1- start-line))
-            ;; Collect points for this range
-            (dotimes (i (1+ (- end-line start-line)))
-              (unless (eobp)
-                (push (point) points)
-                (forward-line 1))))))
+      (goto-char (point-min))
+      (dolist (range (git-gutter:build-unchanged-ranges diffinfos max-line))
+        ;; Move from the end of the previous range, not from `point-min'.
+        (forward-line (- (car range) line))
+        (setq line (car range))
+        (while (and (<= line (cdr range)) (not (eobp)))
+          (push (point) points)
+          (forward-line 1)
+          (setq line (1+ line))))
       (git-gutter:put-signs sign points))))
 
 (defsubst git-gutter:check-file-and-directory ()
