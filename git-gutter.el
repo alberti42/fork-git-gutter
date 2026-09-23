@@ -399,7 +399,7 @@ Argument TEST is the case before BODY execution."
 (defsubst git-gutter:start-jj-diff-process (file proc-buf)
   (let ((args (git-gutter:jj-diff-arguments file)))
     (apply #'start-file-process "git-gutter" proc-buf
-           "jj" "--config=ui.diff-formatter=:git" "--ignore-working-copy"
+           "jj" "--config=ui.diff-formatter=:git"
            "--no-pager" "--quiet" "--color" "never" "diff" "--context" "0"
            args)))
 
