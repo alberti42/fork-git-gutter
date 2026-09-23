@@ -116,7 +116,6 @@ With straight.el:
 |                      | git-gutter.el     | git-gutter-fringe.el |
 |:---------------------|:-----------------:|:--------------------:|
 | Work in tty frame    | OK                | unsupported          |
-| Work with linum-mode | OK(experimental)  | OK                   |
 | Show on right side   | unsupported       | OK                   |
 | configurable         | more configurable | less configurable    |
 
@@ -206,10 +205,6 @@ Revert current hunk
 Show changes from last commit or Update change information.
 Please execute this command if diff information is not be updated.
 
-#### `git-gutter:linum-setup`
-
-Setup for working with `linum-mode`.
-
 #### `git-gutter:update-all-windows`
 
 Update git-gutter information of buffers in all visible window.
@@ -222,9 +217,6 @@ Update git-gutter information of buffers in all visible window.
 
 ;; If you enable global minor mode
 (global-git-gutter-mode t)
-
-;; If you would like to use git-gutter.el and linum-mode
-(git-gutter:linum-setup)
 
 ;; If you enable git-gutter-mode for some modes
 (add-hook 'ruby-mode-hook 'git-gutter-mode)

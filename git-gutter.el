@@ -222,8 +222,6 @@ Can be a directory-local variable in your project.")
 (defvar git-gutter:diffinfos nil)
 (defvar git-gutter:has-indirect-buffers nil)
 (defvar git-gutter:real-this-command nil)
-(defvar git-gutter:linum-enabled nil)
-(defvar git-gutter:linum-prev-window-margin nil)
 (defvar git-gutter:vcs-type nil)
 (defvar git-gutter:revision-history nil)
 (defvar git-gutter:update-timer nil)
@@ -322,7 +320,7 @@ Argument TEST is the case before BODY execution."
   (or git-gutter:window-width (git-gutter:longest-sign-width)))
 
 (defun git-gutter:set-window-margin (width)
-  (when (and (not git-gutter:linum-enabled) (>= width 0))
+  (when (>= width 0)
     (let ((curwin (get-buffer-window)))
       (set-window-margins curwin width (cdr (window-margins curwin))))))
 
@@ -437,24 +435,6 @@ Argument TEST is the case before BODY execution."
                   `(:inherit ,face))))
     (propertize sign 'face face)))
 
-(defsubst git-gutter:linum-get-overlay (pos)
-  (cl-loop for ov in (overlays-in pos pos)
-           when (overlay-get ov 'linum-str)
-           return ov))
-
-(defun git-gutter:put-signs-linum (sign points)
-  (dolist (pos points)
-    (git-gutter:awhen (git-gutter:linum-get-overlay pos)
-      (overlay-put it 'before-string
-                   (propertize " "
-                               'display
-                               `((margin left-margin)
-                                 ,(concat sign (overlay-get it 'linum-str)))))
-      ;; Ensure changed signs win over separator/unchanged overlays.
-      (let ((raw (substring-no-properties sign)))
-        (when (string-match-p "\\S-" raw)
-          (overlay-put it 'priority 10))))))
-
 (defun git-gutter:wrap-prefix-for-sign (sign pos)
   "Return a `wrap-prefix' string that renders SIGN in the left margin.
 Prepends the gutter sign to any existing `wrap-prefix' text property at POS
@@ -467,23 +447,21 @@ preserved on wrapped rows."
   "Put SIGN at each position in POINTS.
 When `git-gutter:visual-line' is non-nil, continuation rows show WRAP-SIGN,
 or SIGN if WRAP-SIGN is nil."
-  (if git-gutter:linum-enabled
-      (git-gutter:put-signs-linum sign points)
-    (dolist (pos points)
-      (let* ((eol (when git-gutter:visual-line
-                    (save-excursion (goto-char pos) (line-end-position))))
-             ;; Span to eol so `wrap-prefix' fires on every continuation row.
-             (ov (make-overlay pos (or eol pos)))
-             (gutter-sign (git-gutter:before-string sign)))
-        (overlay-put ov 'before-string gutter-sign)
-        ;; Ensure changed signs win over separator/unchanged overlays.
-        (let ((raw (substring-no-properties sign)))
-          (when (string-match-p "\\S-" raw)
-            (overlay-put ov 'priority 10)))
-        (when eol
-          (overlay-put ov 'wrap-prefix
-                       (git-gutter:wrap-prefix-for-sign (or wrap-sign sign) pos)))
-        (overlay-put ov 'git-gutter t)))))
+  (dolist (pos points)
+    (let* ((eol (when git-gutter:visual-line
+                  (save-excursion (goto-char pos) (line-end-position))))
+           ;; Span to eol so `wrap-prefix' fires on every continuation row.
+           (ov (make-overlay pos (or eol pos)))
+           (gutter-sign (git-gutter:before-string sign)))
+      (overlay-put ov 'before-string gutter-sign)
+      ;; Ensure changed signs win over separator/unchanged overlays.
+      (let ((raw (substring-no-properties sign)))
+        (when (string-match-p "\\S-" raw)
+          (overlay-put ov 'priority 10)))
+      (when eol
+        (overlay-put ov 'wrap-prefix
+                     (git-gutter:wrap-prefix-for-sign (or wrap-sign sign) pos)))
+      (overlay-put ov 'git-gutter t))))
 
 (defsubst git-gutter:sign-width (sign)
   (cl-loop for s across sign
@@ -546,9 +524,8 @@ or SIGN if WRAP-SIGN is nil."
          (git-gutter))
         ((memq git-gutter:real-this-command git-gutter:update-windows-commands)
          (git-gutter)
-         (unless (bound-and-true-p global-linum-mode)
-           (git-gutter:update-other-window-buffers (selected-window)
-                                                   (current-buffer))))))
+         (git-gutter:update-other-window-buffers (selected-window)
+                                                 (current-buffer)))))
 
 (defsubst git-gutter:diff-process-buffer (curfile)
   (concat " *git-gutter-" curfile "-*"))
@@ -558,50 +535,13 @@ or SIGN if WRAP-SIGN is nil."
     (git-gutter:awhen (get-buffer buf)
       (kill-buffer it))))
 
-(defsubst git-gutter:linum-padding ()
-  (cl-loop repeat (git-gutter:window-margin)
-           collect " " into paddings
-           finally return (apply #'concat paddings)))
-
-(defun git-gutter:linum-prepend-spaces ()
-  (save-excursion
-    (goto-char (point-min))
-    (let ((padding (git-gutter:linum-padding))
-          points)
-      (while (not (eobp))
-        (push (point) points)
-        (forward-line 1))
-      (git-gutter:put-signs-linum padding points))))
-
-(defun git-gutter:linum-update (diffinfos)
-  (let ((linum-width (car (window-margins))))
-    (when linum-width
-      (git-gutter:linum-prepend-spaces)
-      (git-gutter:view-set-overlays diffinfos)
-      (let ((curwin (get-buffer-window))
-            (margin (+ linum-width (git-gutter:window-margin))))
-        (setq git-gutter:linum-prev-window-margin margin)
-        (set-window-margins curwin margin (cdr (window-margins curwin)))))))
-
-(defun git-gutter:linum-init ()
-  (setq-local git-gutter:linum-enabled t)
-  (make-local-variable 'git-gutter:linum-prev-window-margin))
-
-(defun git-gutter:linum-update-window (&rest _args)
-  (when git-gutter:display-p
-    (if (and git-gutter-mode git-gutter:diffinfos)
-        (git-gutter:linum-update git-gutter:diffinfos)
-      (let ((curwin (get-buffer-window))
-            (margin (or git-gutter:linum-prev-window-margin
-                        (car (window-margins)))))
-        (set-window-margins curwin margin (cdr (window-margins curwin)))))))
-
 ;;;###autoload
 (defun git-gutter:linum-setup ()
-  "Setup for linum-mode."
-  (setq git-gutter:init-function 'git-gutter:linum-init
-        git-gutter:view-diff-function nil)
-  (advice-add 'linum-update-window :after #'git-gutter:linum-update-window))
+  "Do nothing; support for `linum-mode' has been removed.
+Use `display-line-numbers-mode' instead."
+  (display-warning 'git-gutter
+                   "`git-gutter:linum-setup' does nothing; use `display-line-numbers-mode'"))
+(make-obsolete 'git-gutter:linum-setup 'display-line-numbers-mode "0.95")
 
 (defun git-gutter:show-backends ()
   (mapconcat (lambda (backend)
@@ -1172,10 +1112,6 @@ start revision."
               (git-gutter:start-live-update file original now))
           (delete-file now)
           (delete-file original))))))
-
-;; for linum-user
-(when (and (and (boundp 'global-linum-mode) global-linum-mode) (not (boundp 'git-gutter-fringe)))
-  (git-gutter:linum-setup))
 
 (defun git-gutter:all-hunks ()
   "Cound unstaged hunks in all buffers"
