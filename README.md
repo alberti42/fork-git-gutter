@@ -31,6 +31,7 @@ author's.
 | [#250](https://github.com/emacsorphanage/git-gutter/pull/250) | Staging hunks in a bare repository used through `GIT_DIR` and `GIT_WORK_TREE` |
 | [#210](https://github.com/emacsorphanage/git-gutter/pull/210) | Files whose encoding differs from the Emacs default |
 | [#230](https://github.com/emacsorphanage/git-gutter/pull/230) | `git-gutter:popup-hunk-inline-at-point`, which shows the hunk in the buffer |
+| [#235](https://github.com/emacsorphanage/git-gutter/pull/235) | Signs are updated through `window-buffer-change-functions` instead of pre- and post-command hooks |
 
 ### CI
 
@@ -63,11 +64,21 @@ obsolete. Every Emacs version git-gutter supports (27.1 and later) has
 linum's margin. `git-gutter:linum-setup` remains as an obsolete function
 that only shows a warning, so init files that call it still load.
 
+### Signs updated on window changes
+
+The signs are updated when a window starts showing the buffer
+(`window-buffer-change-functions`, from #235) and when a window showing
+the buffer is selected (`window-selection-change-functions`). Both hooks
+need Emacs 27.1. They replace the pre- and post-command hooks and the
+advice on `switch-to-buffer` and `quit-window`.
+
+The variables `git-gutter:update-commands` and
+`git-gutter:update-windows-commands`, which listed the commands after
+which the signs were updated, are removed. Remove them from your
+configuration: `add-to-list` on either one now signals `void-variable`.
+
 ### Still open
 
-- [#235](https://github.com/emacsorphanage/git-gutter/pull/235): update
-  signs through `window-buffer-change-functions`. That hook needs Emacs
-  27.1, which is now the minimum; the pull request needs changes.
 - [#243](https://github.com/emacsorphanage/git-gutter/pull/243): faster
   `git-gutter:view-for-unchanged`. It conflicts with #248 and hides the
   separator on unchanged lines.
