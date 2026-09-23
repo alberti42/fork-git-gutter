@@ -68,13 +68,6 @@ character for signs of changes"
   :type 'string
   :group 'git-gutter)
 
-(defcustom git-gutter:update-commands
-  '(ido-switch-buffer helm-buffers-list)
-  "Each command of this list is executed, gutter information is updated."
-  :type '(list (function :tag "Update command")
-               (repeat :inline t (function :tag "Update command")))
-  :group 'git-gutter)
-
 (defcustom git-gutter:update-hooks
   '(after-save-hook
     after-revert-hook
@@ -215,20 +208,12 @@ Can be a directory-local variable in your project.")
 (defvar-local git-gutter:enabled nil)
 (defvar git-gutter:diffinfos nil)
 (defvar git-gutter:has-indirect-buffers nil)
-(defvar git-gutter:real-this-command nil)
 (defvar git-gutter:vcs-type nil)
 (defvar git-gutter:revision-history nil)
 (defvar git-gutter:update-timer nil)
 (defvar-local git-gutter:last-chars-modified-tick nil)
 
 (defvar git-gutter:popup-buffer "*git-gutter:diff*")
-(defvar git-gutter:ignore-commands
-  '(minibuffer-complete-and-exit
-    exit-minibuffer
-    ido-exit-minibuffer
-    helm-maybe-exit-minibuffer
-    helm-confirm-and-exit-minibuffer))
-
 (defmacro git-gutter:awhen (test &rest body)
   "Anaphoric when.
 Argument TEST is the case before BODY execution."
