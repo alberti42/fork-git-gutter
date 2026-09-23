@@ -245,4 +245,73 @@ bar
           (should-not (buffer-live-p clone)))
       (kill-buffer base))))
 
+;; Staging tests: commit a file with lines 1..10, change line 5,
+;; stage that hunk with `git-gutter:stage-hunk', and check the index.
+
+(defun git-gutter-test:git (&rest args)
+  "Run git with ARGS in `default-directory'; signal an error on failure."
+  (with-temp-buffer
+    (unless (zerop (apply #'process-file "git" nil t nil
+                          "-c" "user.name=test" "-c" "user.email=test@example.com"
+                          args))
+      (error "git %S failed: %s" args (buffer-string)))
+    (buffer-string)))
+
+(defun git-gutter-test:stage-line-5 (file)
+  "Change line 5 of FILE, stage the hunk with git-gutter, return `git diff --cached'."
+  (let ((buf (find-file-noselect file)))
+    (unwind-protect
+        (with-current-buffer buf
+          (goto-char (point-min))
+          (forward-line 4)
+          (delete-region (point) (line-end-position))
+          (insert "FIVE")
+          (save-buffer)
+          (git-gutter-mode 1)
+          (git-gutter)
+          (with-timeout (10 (error "git-gutter did not finish"))
+            (while (not git-gutter:enabled)
+              (accept-process-output nil 0.1)))
+          (goto-char (point-min))
+          (forward-line 4)
+          (let ((git-gutter:ask-p nil))
+            (git-gutter:stage-hunk))
+          (git-gutter-test:git "diff" "--cached" "--no-color"))
+      (with-current-buffer buf (set-buffer-modified-p nil))
+      (kill-buffer buf))))
+
+(ert-deftest git-gutter:stage-hunk-in-subdirectory ()
+  "Stage a hunk of a file that is not in the top directory of the repository."
+  (with-temporary-directory
+   (lambda ()
+     (git-gutter-test:git "init" "-q")
+     (make-directory "sub")
+     (with-temp-file "sub/f.txt"
+       (dotimes (i 10) (insert (format "%d\n" (1+ i)))))
+     (git-gutter-test:git "add" "sub/f.txt")
+     (git-gutter-test:git "commit" "-q" "-m" "init")
+     (let ((cached (git-gutter-test:stage-line-5
+                    (expand-file-name "sub/f.txt"))))
+       (should (string-match-p "^\\+FIVE\r?$" cached))))))
+
+(ert-deftest git-gutter:stage-hunk-in-bare-repository ()
+  "Stage a hunk when GIT_DIR and GIT_WORK_TREE point to a bare repository."
+  (with-temporary-directory
+   (lambda ()
+     (let ((git-dir (expand-file-name "repo.git"))
+           (work-tree (file-name-as-directory (expand-file-name "home")))
+           (process-environment (copy-sequence process-environment)))
+       (git-gutter-test:git "init" "-q" "--bare" git-dir)
+       (setenv "GIT_DIR" git-dir)
+       (setenv "GIT_WORK_TREE" work-tree)
+       (make-directory (expand-file-name ".config/x" work-tree) t)
+       (let ((default-directory work-tree))
+         (with-temp-file ".config/x/f.txt"
+           (dotimes (i 10) (insert (format "%d\n" (1+ i)))))
+         (git-gutter-test:git "add" ".config/x/f.txt")
+         (git-gutter-test:git "commit" "-q" "-m" "init")
+         (let ((cached (git-gutter-test:stage-line-5
+                        (expand-file-name ".config/x/f.txt"))))
+           (should (string-match-p "^\\+FIVE\r?$" cached))))))))
+
 ;;; test-git-gutter.el end here
