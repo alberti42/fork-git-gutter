@@ -966,11 +966,12 @@ or SIGN if WRAP-SIGN is nil."
                                        (get-buffer-create proc-buf))))))
 
 (defun git-gutter:kill-indirect-buffer ()
-  (with-current-buffer (buffer-base-buffer)
-    (when git-gutter:has-indirect-buffers
-      (if (< 1 git-gutter:has-indirect-buffers)
-          (setq git-gutter:has-indirect-buffers (1- git-gutter:has-indirect-buffers))
-        (kill-local-variable 'git-gutter:has-indirect-buffers)))))
+  (when (buffer-live-p (buffer-base-buffer))
+    (with-current-buffer (buffer-base-buffer)
+      (when git-gutter:has-indirect-buffers
+        (if (< 1 git-gutter:has-indirect-buffers)
+            (setq git-gutter:has-indirect-buffers (1- git-gutter:has-indirect-buffers))
+          (kill-local-variable 'git-gutter:has-indirect-buffers))))))
 
 (defun git-gutter:make-indirect-buffer (oldfun base-buffer &rest args)
   (with-current-buffer (or (buffer-base-buffer (window-normalize-buffer base-buffer))
