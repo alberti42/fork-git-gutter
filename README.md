@@ -221,13 +221,20 @@ for any file in the current directory:
 
 ### Live updating
 
-If you set `git-gutter:update-interval` seconds larger than 0, `git-gutter` updates
-diff information in real-time by idle timer.
+If you set `git-gutter:update-interval` larger than 0, `git-gutter`
+compares the unsaved buffer with the original version each time Emacs
+has been idle for that many seconds, for example after you stop typing.
+With 0.1, the signs follow your edits:
 
 ```lisp
 (custom-set-variables
- '(git-gutter:update-interval 2))
+ '(git-gutter:update-interval 0.1))
 ```
+
+A live update writes the buffer to a temporary file and runs `diff` on
+it asynchronously. The original version is read from the version
+control system once, and again after each full update, for example when
+you save the buffer.
 
 You can stop timer by `git-gutter:cancel-update-timer` and starts by `git-gutter:start-update-timer`.
 

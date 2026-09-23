@@ -196,8 +196,14 @@ Staged signs are shown only for git, and only when
   :group 'git-gutter)
 
 (defcustom git-gutter:update-interval 0
-  "Time interval in seconds for updating diff information."
-  :type 'integer
+  "Idle time in seconds before a live update, or 0 for no live updates.
+A live update compares the unsaved buffer with the original version
+and runs each time Emacs has been idle for this many seconds, for
+example after you stop typing.  A value such as 0.1 shows changes while
+you edit.  Set it before `git-gutter-mode' is turned on, or restart the
+timer with `git-gutter:cancel-update-timer' and
+`git-gutter:start-update-timer'."
+  :type 'number
   :group 'git-gutter)
 
 (defcustom git-gutter:ask-p t
