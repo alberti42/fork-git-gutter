@@ -441,7 +441,7 @@ Argument TEST is the case before BODY execution."
            when (overlay-get ov 'linum-str)
            return ov))
 
-(defun git-gutter:put-signs-linum (sign points &optional wrap-sign)
+(defun git-gutter:put-signs-linum (sign points)
   (dolist (pos points)
     (git-gutter:awhen (git-gutter:linum-get-overlay pos)
       (overlay-put it 'before-string
@@ -452,10 +452,7 @@ Argument TEST is the case before BODY execution."
       ;; Ensure changed signs win over separator/unchanged overlays.
       (let ((raw (substring-no-properties sign)))
         (when (string-match-p "\\S-" raw)
-          (overlay-put it 'priority 10)))
-      (when git-gutter:visual-line
-        (let ((wp (git-gutter:wrap-prefix-for-sign (or wrap-sign sign) pos)))
-            (overlay-put it 'wrap-prefix wp))))))
+          (overlay-put it 'priority 10))))))
 
 (defun git-gutter:wrap-prefix-for-sign (sign pos)
   "Return a `wrap-prefix' string that renders SIGN in the left margin.
@@ -470,7 +467,7 @@ preserved on wrapped rows."
 When `git-gutter:visual-line' is non-nil, continuation rows show WRAP-SIGN,
 or SIGN if WRAP-SIGN is nil."
   (if git-gutter:linum-enabled
-      (git-gutter:put-signs-linum sign points wrap-sign)
+      (git-gutter:put-signs-linum sign points)
     (dolist (pos points)
       (let* ((eol (when git-gutter:visual-line
                     (save-excursion (goto-char pos) (line-end-position))))
