@@ -644,6 +644,22 @@ on."
     (should (equal (mapcar #'git-gutter-hunk-start-line git-gutter:diffinfos) '(1)))
     (set-buffer-modified-p nil)))
 
+(ert-deftest git-gutter:live-update-interval ()
+  "nil, 0 and negative values of `git-gutter:update-interval' mean off."
+  (dolist (case '((nil . nil) (0 . nil) (-1 . nil) (0.1 . 0.1) (2 . 2)))
+    (let ((git-gutter:update-interval (car case)))
+      (should (equal (git-gutter:live-update-interval) (cdr case))))))
+
+(ert-deftest git-gutter:update-interval-nil ()
+  "With the default nil, the mode turns on and starts no timer."
+  (should-not (default-value 'git-gutter:update-interval))
+  (let ((git-gutter:update-interval nil)
+        (git-gutter:update-timer nil))
+    (git-gutter-test:with-file-in-repo
+      (should git-gutter-mode)
+      (should-not git-gutter:update-timer)
+      (should-error (git-gutter:start-update-timer) :type 'user-error))))
+
 ;; jj backend.  These tests need the jj program and skip without it,
 ;; unless GIT_GUTTER_TEST_REQUIRE_JJ is set, as in the CI jobs that
 ;; install jj; then a missing jj fails the tests.

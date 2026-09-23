@@ -221,10 +221,11 @@ for any file in the current directory:
 
 ### Live updating
 
-If you set `git-gutter:update-interval` larger than 0, `git-gutter`
-compares the unsaved buffer with the original version each time Emacs
-has been idle for that many seconds, for example after you stop typing.
-With 0.1, the signs follow your edits:
+If you set `git-gutter:update-interval` to a number larger than 0,
+`git-gutter` compares the unsaved buffer with the original version each
+time Emacs has been idle for that many seconds, for example after you
+stop typing. With 0.1, the signs follow your edits. The default, `nil`,
+means no live updates:
 
 ```lisp
 (custom-set-variables

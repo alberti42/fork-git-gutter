@@ -195,16 +195,23 @@ Staged signs are shown only for git, and only when
   :type 'hook
   :group 'git-gutter)
 
-(defcustom git-gutter:update-interval 0
-  "Idle time in seconds before a live update, or 0 for no live updates.
+(defcustom git-gutter:update-interval nil
+  "Idle time in seconds before a live update, or nil for no live updates.
 A live update compares the unsaved buffer with the original version
 and runs each time Emacs has been idle for this many seconds, for
 example after you stop typing.  A value such as 0.1 shows changes while
 you edit.  Set it before `git-gutter-mode' is turned on, or restart the
 timer with `git-gutter:cancel-update-timer' and
-`git-gutter:start-update-timer'."
-  :type 'number
+`git-gutter:start-update-timer'.  The value 0 also means no live updates."
+  :type '(choice (const :tag "No live updates" nil)
+                 (number :tag "Idle seconds"))
   :group 'git-gutter)
+
+(defun git-gutter:live-update-interval ()
+  "Return `git-gutter:update-interval' if live updates are on, else nil."
+  (and (numberp git-gutter:update-interval)
+       (> git-gutter:update-interval 0)
+       git-gutter:update-interval))
 
 (defcustom git-gutter:ask-p t
   "Ask whether commit/revert or not."
@@ -701,10 +708,10 @@ Use `display-line-numbers-mode' instead."
               (add-hook hook 'git-gutter nil t))
             (git-gutter)
             (when (and (not git-gutter:update-timer)
-                       (> git-gutter:update-interval 0))
+                       (git-gutter:live-update-interval))
               (setq git-gutter:update-timer
                     (run-with-idle-timer
-                     git-gutter:update-interval t 'git-gutter:live-update))))
+                     (git-gutter:live-update-interval) t 'git-gutter:live-update))))
         (when (> git-gutter:verbosity 2)
           (message "Here is not %s work tree" (git-gutter:show-backends)))
         (git-gutter-mode -1))
@@ -1139,8 +1146,10 @@ start revision."
   (interactive)
   (when git-gutter:update-timer
     (error "Update timer is already running."))
+  (unless (git-gutter:live-update-interval)
+    (user-error "Set `git-gutter:update-interval' to a number above 0 first"))
   (setq git-gutter:update-timer
-        (run-with-idle-timer git-gutter:update-interval t 'git-gutter:live-update)))
+        (run-with-idle-timer (git-gutter:live-update-interval) t 'git-gutter:live-update)))
 
 (defun git-gutter:cancel-update-timer ()
   (interactive)
