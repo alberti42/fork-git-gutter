@@ -11,6 +11,8 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
 
 ## [Unreleased]
 
+## [0.94.2] - 2026-09-23
+
 ### Fixed
 
 - A full update that finished after a later live update, for example
@@ -138,6 +140,7 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
   `when-let`, obsolete since Emacs 31.1
   ([#236](https://github.com/emacsorphanage/git-gutter/pull/236)).
 
-[Unreleased]: https://github.com/alberti42/fork-git-gutter/compare/0.94.1...HEAD
+[Unreleased]: https://github.com/alberti42/fork-git-gutter/compare/0.94.2...HEAD
+[0.94.2]: https://github.com/alberti42/fork-git-gutter/compare/0.94.1...0.94.2
 [0.94.1]: https://github.com/alberti42/fork-git-gutter/compare/0.94.0...0.94.1
 [0.94.0]: https://github.com/alberti42/fork-git-gutter/compare/0.93...0.94.0
