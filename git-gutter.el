@@ -389,7 +389,7 @@ Argument TEST is the case before BODY execution."
 
 (defun git-gutter:jj-diff-arguments (file)
   (let (args)
-    (unless (string= git-gutter:jj-diff-option "@")
+    (unless (string= git-gutter:jj-diff-option "")
       (setq args (nreverse (split-string git-gutter:jj-diff-option))))
     (when (git-gutter:revision-set-p)
         (push "-r" args)
