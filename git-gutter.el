@@ -38,6 +38,9 @@
   :prefix "git-gutter:"
   :group 'vc)
 
+;; Defined by `define-minor-mode' below; declared here for the byte compiler.
+(defvar git-gutter-mode)
+
 (defcustom git-gutter:window-width nil
   "Character width of gutter window.  Emacs mistakes width of some characters.
 It is better to explicitly assign width to this variable, if you use full-width
