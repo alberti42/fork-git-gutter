@@ -482,10 +482,19 @@ or SIGN if WRAP-SIGN is nil."
        default-directory (file-directory-p default-directory)))
 
 (defun git-gutter:window-buffer-change-function (window)
-  "Function to hook into `window-buffer-change-function' to update `git-gutter'."
+  "Function to hook into `window-buffer-change-functions' to update `git-gutter'."
   (with-selected-window (window-normalize-window window)
     (when git-gutter-mode
       (git-gutter))))
+
+(defun git-gutter:window-selection-change-function (window)
+  "Update the signs when WINDOW becomes the selected window.
+Emacs calls this from `window-selection-change-functions' also when
+WINDOW is deselected; then it does nothing."
+  (when (eq window (selected-window))
+    (with-selected-window window
+      (when git-gutter-mode
+        (git-gutter)))))
 
 (defsubst git-gutter:diff-process-buffer (curfile)
   (concat " *git-gutter-" curfile "-*"))
@@ -525,6 +534,8 @@ Use `display-line-numbers-mode' instead."
             (add-hook 'kill-buffer-hook 'git-gutter:kill-buffer-hook nil t)
             (add-hook 'window-buffer-change-functions
                       #'git-gutter:window-buffer-change-function nil t)
+            (add-hook 'window-selection-change-functions
+                      #'git-gutter:window-selection-change-function nil t)
             (dolist (hook git-gutter:update-hooks)
               (add-hook hook 'git-gutter nil t))
             (git-gutter)
@@ -541,6 +552,8 @@ Use `display-line-numbers-mode' instead."
       (remove-hook hook 'git-gutter t))
     (remove-hook 'window-buffer-change-functions
                  #'git-gutter:window-buffer-change-function t)
+    (remove-hook 'window-selection-change-functions
+                 #'git-gutter:window-selection-change-function t)
     (git-gutter:clear-gutter)))
 
 (defun git-gutter--turn-on ()
