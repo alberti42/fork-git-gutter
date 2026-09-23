@@ -440,6 +440,105 @@ bar
     (should (equal (git-gutter-test:unchanged-overlay-lines '((3 . 4)))
                    '(1 2 5 6 7 8 9 10)))))
 
+;; `git-gutter:update-diffinfo' keeps the overlays whose sign did not
+;; change, so that the signs do not flicker.
+
+(defun git-gutter-test:hunk (type start end)
+  (make-git-gutter-hunk :type type :content "" :start-line start :end-line end))
+
+(defun git-gutter-test:sign-overlays ()
+  "The sign overlays of the current buffer, sorted by position."
+  (sort (seq-filter (lambda (ov) (overlay-get ov 'git-gutter))
+                    (overlays-in (point-min) (point-max)))
+        (lambda (a b) (< (overlay-start a) (overlay-start b)))))
+
+(defun git-gutter-test:sign-lines ()
+  "(LINE SIGN) for each sign overlay of the current buffer."
+  (mapcar (lambda (ov)
+            (list (line-number-at-pos (overlay-start ov))
+                  (substring-no-properties
+                   (cadr (get-text-property 0 'display (overlay-get ov 'before-string))))))
+          (git-gutter-test:sign-overlays)))
+
+(defmacro git-gutter-test:with-lines (&rest body)
+  "Run BODY in a buffer with lines 1..10 and the default signs."
+  (declare (indent 0))
+  `(let ((git-gutter:unchanged-sign ".")
+         (git-gutter:separator-sign nil)
+         (git-gutter:visual-line nil)
+         (git-gutter:view-diff-function #'git-gutter:view-diff-infos)
+         (git-gutter:clear-function #'git-gutter:clear-diff-infos))
+     (with-temp-buffer
+       (dotimes (i 10) (insert (format "%d\n" (1+ i))))
+       ,@body)))
+
+(ert-deftest git-gutter:update-diffinfo-keeps-overlays ()
+  "An update with the same hunks keeps every overlay unchanged."
+  (git-gutter-test:with-lines
+    (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'modified 3 4)))
+    (let ((before (git-gutter-test:sign-overlays))
+          (strings (mapcar (lambda (ov) (overlay-get ov 'before-string))
+                           (git-gutter-test:sign-overlays))))
+      (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'modified 3 4)))
+      (should (equal (git-gutter-test:sign-overlays) before))
+      (should (cl-every #'eq strings
+                        (mapcar (lambda (ov) (overlay-get ov 'before-string))
+                                (git-gutter-test:sign-overlays)))))))
+
+(ert-deftest git-gutter:update-diffinfo-changes-only-changed-signs ()
+  "An update changes the signs of the changed lines and keeps the others."
+  (git-gutter-test:with-lines
+    (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'modified 3 4)))
+    (let ((line-8 (nth 7 (git-gutter-test:sign-overlays)))
+          (string-8 (overlay-get (nth 7 (git-gutter-test:sign-overlays)) 'before-string)))
+      (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'modified 3 3)
+                                        (git-gutter-test:hunk 'added 6 6)))
+      (should (equal (git-gutter-test:sign-lines)
+                     '((1 ".") (2 ".") (3 "=") (4 ".") (5 ".") (6 "+")
+                       (7 ".") (8 ".") (9 ".") (10 "."))))
+      (should (eq (nth 7 (git-gutter-test:sign-overlays)) line-8))
+      (should (eq (overlay-get line-8 'before-string) string-8)))
+    ;; The same signs as drawing into an empty buffer.
+    (let ((incremental (git-gutter-test:sign-lines)))
+      (remove-overlays (point-min) (point-max) 'git-gutter t)
+      (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'modified 3 3)
+                                        (git-gutter-test:hunk 'added 6 6)))
+      (should (equal (git-gutter-test:sign-lines) incremental)))))
+
+(ert-deftest git-gutter:update-diffinfo-deletes-unused-overlays ()
+  "Overlays that no line needs any more are deleted."
+  (git-gutter-test:with-lines
+    (let ((git-gutter:unchanged-sign nil))
+      (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'modified 3 4)))
+      (should (equal (git-gutter-test:sign-lines) '((3 "=") (4 "="))))
+      (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'deleted 7 7)))
+      (should (equal (git-gutter-test:sign-lines) '((7 "-"))))
+      (git-gutter:update-diffinfo nil)
+      (should (null (git-gutter-test:sign-overlays))))))
+
+(ert-deftest git-gutter:update-diffinfo-visual-line-moves-overlay ()
+  "With `git-gutter:visual-line', a longer line keeps its overlay."
+  (git-gutter-test:with-lines
+    (let ((git-gutter:visual-line t)
+          (git-gutter:unchanged-sign nil))
+      (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'modified 3 3)))
+      (let ((ov (car (git-gutter-test:sign-overlays))))
+        (goto-char (overlay-end ov))
+        (insert "abc")
+        (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'modified 3 3)))
+        (should (equal (git-gutter-test:sign-overlays) (list ov)))
+        (should (= (overlay-end ov) (save-excursion (goto-char (overlay-start ov))
+                                                    (line-end-position))))))))
+
+(ert-deftest git-gutter:update-diffinfo-other-view-function ()
+  "With another view function, the clear function runs first."
+  (git-gutter-test:with-lines
+    (let* ((calls nil)
+           (git-gutter:clear-function (lambda () (push 'clear calls)))
+           (git-gutter:view-diff-function (lambda (_) (push 'view calls))))
+      (git-gutter:update-diffinfo nil)
+      (should (equal calls '(view clear))))))
+
 ;; Staged signs.
 
 (defun git-gutter-test:write-lines (file lines)

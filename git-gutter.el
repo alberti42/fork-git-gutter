@@ -561,27 +561,54 @@ preserved on wrapped rows."
   (let ((existing (get-text-property pos 'wrap-prefix)))
     (concat (git-gutter:before-string sign) (if (stringp existing) existing ""))))
 
+(defvar git-gutter--old-overlays nil
+  "Hash table from positions to the sign overlays that start there.
+`git-gutter:view-diff-infos' fills it before drawing the signs;
+`git-gutter:put-signs' reuses these overlays.")
+
+(defun git-gutter--sign-key (sign)
+  (cons (substring-no-properties sign) (get-text-property 0 'face sign)))
+
+(defun git-gutter--old-overlay (pos)
+  "Remove from `git-gutter--old-overlays' an overlay at POS and return it."
+  (when git-gutter--old-overlays
+    (let ((ovs (gethash pos git-gutter--old-overlays)))
+      (when ovs
+        (puthash pos (cdr ovs) git-gutter--old-overlays)
+        (car ovs)))))
+
 (defun git-gutter:put-signs (sign points &optional wrap-sign)
   "Put SIGN at each position in POINTS.
 When `git-gutter:visual-line' is non-nil, continuation rows show WRAP-SIGN,
-or SIGN if WRAP-SIGN is nil."
+or SIGN if WRAP-SIGN is nil.  An overlay from `git-gutter--old-overlays'
+that already shows the same sign at the same position is kept unchanged."
   ;; SIGN is the same for all POINTS: build its display string once, and
   ;; let every overlay share it.
   (let ((gutter-sign (git-gutter:before-string sign))
         ;; Ensure changed signs win over separator/unchanged overlays.
-        (priority (string-match-p "\\S-" (substring-no-properties sign)))
-        (wrap-sign (or wrap-sign sign)))
+        (priority (when (string-match-p "\\S-" (substring-no-properties sign))
+                    10))
+        (wrap-sign (or wrap-sign sign))
+        (sign-key (git-gutter--sign-key sign)))
     (dolist (pos points)
       (let* ((eol (when git-gutter:visual-line
                     (save-excursion (goto-char pos) (line-end-position))))
              ;; Span to eol so `wrap-prefix' fires on every continuation row.
-             (ov (make-overlay pos (or eol pos))))
-        (overlay-put ov 'before-string gutter-sign)
-        (when priority
-          (overlay-put ov 'priority 10))
-        (when eol
+             (end (or eol pos))
+             (key (vector sign-key
+                          (when eol (git-gutter--sign-key wrap-sign))
+                          (when eol (get-text-property pos 'wrap-prefix))))
+             (ov (git-gutter--old-overlay pos)))
+        (if (not ov)
+            (setq ov (make-overlay pos end))
+          (unless (= (overlay-end ov) end)
+            (move-overlay ov pos end)))
+        (unless (equal-including-properties (overlay-get ov 'git-gutter-key) key)
+          (overlay-put ov 'before-string gutter-sign)
+          (overlay-put ov 'priority priority)
           (overlay-put ov 'wrap-prefix
-                       (git-gutter:wrap-prefix-for-sign wrap-sign pos)))
+                       (when eol (git-gutter:wrap-prefix-for-sign wrap-sign pos)))
+          (overlay-put ov 'git-gutter-key key))
         (overlay-put ov 'git-gutter t)))))
 
 (defsubst git-gutter:sign-width (sign)
@@ -772,32 +799,53 @@ Use `display-line-numbers-mode' instead."
                   (forward-line 1)))
                (setq curline (1+ end-line))))))
 
-(defun git-gutter:view-diff-infos (diffinfos)
-  (when (or diffinfos git-gutter:always-show-separator)
-    (git-gutter:view-set-overlays diffinfos))
-  (git-gutter:show-gutter diffinfos))
-
 (defsubst git-gutter:reset-window-margin-p ()
   (or git-gutter:hide-gutter (not global-git-gutter-mode)))
+
+(defun git-gutter:view-diff-infos (diffinfos)
+  "Show the signs for DIFFINFOS.
+Keep the sign overlays that still show the right sign, and delete the
+others."
+  (let ((git-gutter--old-overlays (make-hash-table)))
+    (dolist (ov (overlays-in (point-min) (point-max)))
+      (when (overlay-get ov 'git-gutter)
+        (push ov (gethash (overlay-start ov) git-gutter--old-overlays))))
+    (when (or diffinfos git-gutter:always-show-separator)
+      (git-gutter:view-set-overlays diffinfos))
+    (maphash (lambda (_pos ovs) (mapc #'delete-overlay ovs))
+             git-gutter--old-overlays))
+  (if (git-gutter:show-gutter-p diffinfos)
+      (git-gutter:set-window-margin (git-gutter:window-margin))
+    (when (git-gutter:reset-window-margin-p)
+      (git-gutter:set-window-margin 0))))
 
 (defun git-gutter:clear-diff-infos ()
   (when (git-gutter:reset-window-margin-p)
     (git-gutter:set-window-margin 0))
   (remove-overlays (point-min) (point-max) 'git-gutter t))
 
+(defun git-gutter--reset-state ()
+  (setq git-gutter:enabled nil
+        git-gutter:last-chars-modified-tick nil
+        git-gutter:diffinfos nil))
+
 (defun git-gutter:clear-gutter ()
   (save-restriction
     (widen)
     (when git-gutter:clear-function
       (funcall git-gutter:clear-function)))
-  (setq git-gutter:enabled nil
-        git-gutter:last-chars-modified-tick nil
-        git-gutter:diffinfos nil))
+  (git-gutter--reset-state))
 
 (defun git-gutter:update-diffinfo (diffinfos)
   (save-restriction
     (widen)
-    (git-gutter:clear-gutter)
+    (if (and git-gutter:display-p
+             (eq git-gutter:view-diff-function #'git-gutter:view-diff-infos)
+             (eq git-gutter:clear-function #'git-gutter:clear-diff-infos))
+        ;; `git-gutter:view-diff-infos' replaces only the signs that
+        ;; changed.  Clearing all of them first makes the signs flicker.
+        (git-gutter--reset-state)
+      (git-gutter:clear-gutter))
     (setq git-gutter:diffinfos diffinfos)
     (when (and git-gutter:display-p git-gutter:view-diff-function)
       (funcall git-gutter:view-diff-function diffinfos))))

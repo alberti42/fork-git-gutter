@@ -16,6 +16,11 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
 - `git-gutter:statistic` counted one line too few for each added hunk
   and no lines for deleted hunks. It now counts the lines that
   `git diff --numstat` counts.
+- The signs flickered on every update, for example while typing with
+  `git-gutter:update-interval` set, because each update removed all
+  signs and drew them again. An update now changes only the signs that
+  changed, when `git-gutter:view-diff-function` and
+  `git-gutter:clear-function` have their default values.
 
 ## [0.94.0] - 2026-09-23
 
