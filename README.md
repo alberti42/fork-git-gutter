@@ -103,6 +103,11 @@ Popup current diff hunk(alias `git-gutter:popup-diff`)
 `git-gutter:next-hunk` and `git-gutter:previous-hunk` update content
 of buffer popuped by `git-gutter:popup-diff` to current hunk.
 
+#### `git-gutter:popup-hunk-inline-at-point`
+
+Show the current hunk above the current line, in the buffer itself.
+The hunk disappears at the next key press.
+
 #### `git-gutter:stage-hunk`
 
 Stage current hunk. You can use this command like `git add -p`.
