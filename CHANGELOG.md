@@ -1,0 +1,85 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
+0.93 have no entries; see the git history.
+
+## [Unreleased]
+
+### Added
+
+- `git-gutter:popup-hunk-inline-at-point`, which shows the current hunk
+  above the current line until the next key press
+  ([#230](https://github.com/emacsorphanage/git-gutter/pull/230)).
+- The signs are updated when a window showing the buffer is selected,
+  for example with `other-window` (`window-selection-change-functions`).
+- README: theming the gutter column background
+  ([#247](https://github.com/emacsorphanage/git-gutter/pull/247)).
+
+### Changed
+
+- The minimum Emacs version is 27.1; it was 25.1. Since 0.92
+  ([#232](https://github.com/emacsorphanage/git-gutter/pull/232)),
+  git-gutter calls `executable-find` with a second argument, REMOTE,
+  which Emacs 27.1 added. On Emacs 26 every git call signals
+  `wrong-number-of-arguments`, so git-gutter has not worked there since
+  0.92. Declaring 27.1 makes package.el refuse to install it on Emacs 26,
+  instead of installing a version that fails.
+- The signs are updated when a window starts showing the buffer
+  (`window-buffer-change-functions`), instead of through pre- and
+  post-command hooks and advice on `switch-to-buffer` and `quit-window`
+  ([#235](https://github.com/emacsorphanage/git-gutter/pull/235)).
+- With `git-gutter:visual-line`, the signs are drawn on the continuation
+  rows of a wrapped line with a `wrap-prefix`, instead of one overlay per
+  visual row ([#248](https://github.com/emacsorphanage/git-gutter/pull/248)).
+
+### Deprecated
+
+- `git-gutter:linum-setup` does nothing except show a warning. Use
+  `display-line-numbers-mode`.
+
+### Removed
+
+- Support for `linum-mode`. Emacs 26.1 added the built-in
+  `display-line-numbers-mode` and announced that `linum-mode` would
+  become obsolete; Emacs 29.1 made linum.el obsolete. Every Emacs version
+  git-gutter supports has `display-line-numbers-mode`.
+- `git-gutter:update-commands` and `git-gutter:update-windows-commands`,
+  which listed the commands after which the signs were updated
+  ([#235](https://github.com/emacsorphanage/git-gutter/pull/235)).
+  Remove them from your configuration: `add-to-list` on either one now
+  signals `void-variable`.
+- `git-gutter:next-visual-line`
+  ([#248](https://github.com/emacsorphanage/git-gutter/pull/248)).
+
+### Fixed
+
+- With `git-gutter:visual-line`, a sign now appears on every row of a
+  wrapped line, a sign of a changed line is drawn over the separator, and
+  the sign of a deleted hunk appears only on the first row of the line
+  above the deletion
+  ([#248](https://github.com/emacsorphanage/git-gutter/pull/248)).
+- `git-gutter:stage-hunk` failed on Windows when `core.autocrlf` is
+  `true`, the default of Git for Windows: the patch was written with CRLF
+  line endings, and `git apply` rejected it
+  ([#210](https://github.com/emacsorphanage/git-gutter/pull/210)).
+- Files whose encoding differs from the Emacs default: diffs, temporary
+  files, staging patches and the popup buffer now use the buffer's
+  `buffer-file-coding-system`
+  ([#210](https://github.com/emacsorphanage/git-gutter/pull/210)).
+- `git-gutter:stage-hunk` staged nothing when the repository is a bare
+  repository used through `GIT_DIR` and `GIT_WORK_TREE`
+  ([#250](https://github.com/emacsorphanage/git-gutter/pull/250)).
+- Killing an indirect buffer whose base buffer no longer exists, or a
+  clone of an indirect buffer, signalled `wrong-type-argument`
+  ([#240](https://github.com/emacsorphanage/git-gutter/pull/240)).
+- Byte-compilation warnings: missing `lexical-binding` cookie, and
+  `when-let`, obsolete since Emacs 31.1
+  ([#236](https://github.com/emacsorphanage/git-gutter/pull/236)).
+
+[Unreleased]: https://github.com/alberti42/fork-git-gutter/compare/0.93...HEAD

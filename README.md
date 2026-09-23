@@ -20,62 +20,20 @@ it shows as merged upstream once this work reaches the upstream
 repository. Fixes to a pull request are separate commits after the
 author's.
 
-### Merged pull requests
+The changes since 0.93, including the pull requests merged so far, are
+listed in [CHANGELOG.md](CHANGELOG.md). The next release will be 0.94.0.
 
-| Pull request | Change |
-|:-------------|:-------|
-| [#248](https://github.com/emacsorphanage/git-gutter/pull/248) | Signs on the continuation rows of wrapped lines when `git-gutter:visual-line` is on |
-| [#247](https://github.com/emacsorphanage/git-gutter/pull/247) | Documentation for theming the gutter column background |
-| [#246](https://github.com/emacsorphanage/git-gutter/pull/246) | actions/checkout v6 (then v7 in a separate commit) |
-| [#240](https://github.com/emacsorphanage/git-gutter/pull/240) | Killing an indirect buffer whose base buffer is gone |
-| [#250](https://github.com/emacsorphanage/git-gutter/pull/250) | Staging hunks in a bare repository used through `GIT_DIR` and `GIT_WORK_TREE` |
-| [#210](https://github.com/emacsorphanage/git-gutter/pull/210) | Files whose encoding differs from the Emacs default |
-| [#230](https://github.com/emacsorphanage/git-gutter/pull/230) | `git-gutter:popup-hunk-inline-at-point`, which shows the hunk in the buffer |
-| [#235](https://github.com/emacsorphanage/git-gutter/pull/235) | Signs are updated through `window-buffer-change-functions` instead of pre- and post-command hooks |
+### Versioning
 
-### CI
+From 0.94.0 on, this project follows
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html) and records
+its changes in [CHANGELOG.md](CHANGELOG.md), in the format of
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-Before, CI ran `make ci`, which packages and byte-compiles the package
-but does not run the tests, and `make test` did not work. CI now runs
-the ERT tests with Emacs 27.2, 28.2, 29.4, 30.2, 31.1 and snapshot on
-Linux, macOS and Windows. (macOS skips 27.2; Windows skips 31.1, which
-the Windows setup action cannot install.)
-
-Running the tests on Windows showed that `git-gutter:stage-hunk` failed
-when `core.autocrlf` is `true`, the default of Git for Windows: Emacs
-wrote the patch with CRLF line endings, and `git apply` rejected it.
-#210 writes the patch with Unix line endings.
-
-### Emacs 27.1 or higher
-
-The minimum Emacs version is now 27.1; it was 25.1. Since version 0.92
-(#232, April 2024), git-gutter calls `executable-find` with a second
-argument, REMOTE, which Emacs 27.1 added. On Emacs 26 every git call
-signals `wrong-number-of-arguments`, so git-gutter has not worked there
-since 0.92. Declaring 27.1 makes package.el refuse to install it on
-Emacs 26, instead of installing a version that fails.
-
-### linum-mode support removed
-
-Emacs 26.1 added the built-in `display-line-numbers-mode` and announced
-that `linum-mode` would become obsolete; Emacs 29.1 made linum.el
-obsolete. Every Emacs version git-gutter supports (27.1 and later) has
-`display-line-numbers-mode`. git-gutter no longer puts its signs into
-linum's margin. `git-gutter:linum-setup` remains as an obsolete function
-that only shows a warning, so init files that call it still load.
-
-### Signs updated on window changes
-
-The signs are updated when a window starts showing the buffer
-(`window-buffer-change-functions`, from #235) and when a window showing
-the buffer is selected (`window-selection-change-functions`). Both hooks
-need Emacs 27.1. They replace the pre- and post-command hooks and the
-advice on `switch-to-buffer` and `quit-window`.
-
-The variables `git-gutter:update-commands` and
-`git-gutter:update-windows-commands`, which listed the commands after
-which the signs were updated, are removed. Remove them from your
-configuration: `add-to-list` on either one now signals `void-variable`.
+The public API consists of the commands, the user options (`defcustom`)
+and faces, the variables `git-gutter:view-diff-function`,
+`git-gutter:clear-function` and `git-gutter:init-function`, and the
+`git-gutter-hunk` structure; git-gutter-fringe uses the last two groups.
 
 ### Still open
 
