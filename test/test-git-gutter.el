@@ -160,12 +160,13 @@ bar
     (global-git-gutter-mode t)
     (should-not git-gutter-mode))
 
-  (let ((git-gutter:disabled-modes '(emacs-lisp-mode)))
-    (with-current-buffer (find-file-noselect "test-git-gutter.el")
-      (global-git-gutter-mode t)
-      (should-not git-gutter-mode)))
-
-  (kill-buffer "test-git-gutter.el"))
+  (let* ((git-gutter:disabled-modes '(emacs-lisp-mode))
+         (buf (find-file-noselect "test-git-gutter.el")))
+    (unwind-protect
+        (with-current-buffer buf
+          (global-git-gutter-mode t)
+          (should-not git-gutter-mode))
+      (kill-buffer buf))))
 
 (ert-deftest git-gutter-git-diff-arguments ()
   "Command line options of `git diff'"
