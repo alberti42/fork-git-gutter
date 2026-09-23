@@ -104,9 +104,11 @@ character for signs of changes"
   :type 'string
   :group 'git-gutter)
 
-(defcustom git-gutter:staged-sign "*"
-  "Staged sign."
-  :type 'string
+(defcustom git-gutter:staged-sign nil
+  "Sign for lines whose changes are staged, or nil to show no staged signs.
+Staged signs are shown only for git, and only when
+`git-gutter:start-revision' is not set."
+  :type '(choice (const :tag "No staged signs" nil) string)
   :group 'git-gutter)
 
 (defcustom git-gutter:unchanged-sign nil
@@ -392,8 +394,14 @@ Argument TEST is the case before BODY execution."
 (defvar-local git-gutter:staged-diffinfos nil)
 (defvar-local git-gutter:pending-processes 0)
 
+(defun git-gutter:show-staged-p ()
+  "Non-nil when staged signs are shown in the current buffer."
+  (and git-gutter:staged-sign
+       (eq git-gutter:vcs-type 'git)
+       (not (git-gutter:revision-set-p))))
+
 (defun git-gutter:start-diff-process (curfile proc-buf)
-  (if (eq git-gutter:vcs-type 'git)
+  (if (git-gutter:show-staged-p)
       (git-gutter:start-combined-git-diff-process curfile proc-buf)
     (let ((file (git-gutter:base-file))
           (curbuf (current-buffer))
@@ -558,10 +566,11 @@ or SIGN if WRAP-SIGN is nil."
 (defun git-gutter:longest-sign-width ()
   (let ((signs (list git-gutter:modified-sign
                      git-gutter:added-sign
-                     git-gutter:deleted-sign
-                     git-gutter:staged-sign)))
+                     git-gutter:deleted-sign)))
     (when git-gutter:unchanged-sign
       (push git-gutter:unchanged-sign signs))
+    (when git-gutter:staged-sign
+      (push git-gutter:staged-sign signs))
     (+ (apply #'max (mapcar 'git-gutter:sign-width signs))
        (git-gutter:sign-width git-gutter:separator-sign))))
 
