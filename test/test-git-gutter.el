@@ -229,4 +229,19 @@ bar
         (expected "Git/Hg/Bzr"))
     (should (string= (git-gutter:show-backends) expected))))
 
+;; `clone-buffer' copies the buffer-local `kill-buffer-hook' of an
+;; indirect buffer into a buffer that has no base buffer.
+(ert-deftest git-gutter:kill-indirect-buffer-without-base ()
+  "Killing a clone of an indirect buffer does not signal an error."
+  (let* ((base (generate-new-buffer "git-gutter-base"))
+         (indirect (make-indirect-buffer
+                    base (generate-new-buffer-name "git-gutter-indirect")))
+         (clone (with-current-buffer indirect (clone-buffer))))
+    (unwind-protect
+        (progn
+          (should-not (buffer-base-buffer clone))
+          (kill-buffer clone)
+          (should-not (buffer-live-p clone)))
+      (kill-buffer base))))
+
 ;;; test-git-gutter.el end here
