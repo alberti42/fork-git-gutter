@@ -79,15 +79,6 @@ With straight.el:
 * [Git](http://git-scm.com/)(1.7.0 or higher)
 
 
-## git-gutter.el vs [git-gutter-fringe.el](https://github.com/syohex/emacs-git-gutter-fringe)
-
-|                      | git-gutter.el     | git-gutter-fringe.el |
-|:---------------------|:-----------------:|:--------------------:|
-| Work in tty frame    | OK                | unsupported          |
-| Show on right side   | unsupported       | OK                   |
-| configurable         | more configurable | less configurable    |
-
-
 ## Installation
 
 To install this fork, see [Installing this fork](#installing-this-fork).
@@ -609,6 +600,13 @@ Vim version of GitGutter
 
 Fork of `git-gutter.el`. Some features which are not provided `git-gutter.el` provides.
 However git-gutter-plus updates diff information synchronously.
+
+### [git-gutter-fringe](https://github.com/emacsorphanage/git-gutter-fringe)
+
+An add-on to `git-gutter.el` that draws the signs in the fringe instead
+of the margin, so it works only in graphical frames. It is a separate
+package in the Emacs orphanage, last changed in 2021, and is not
+maintained with this fork; it shows no staged signs.
 
 [melpa-link]: http://melpa.org/#/git-gutter
 [melpa-stable-link]: http://stable.melpa.org/#/git-gutter
