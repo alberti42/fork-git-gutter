@@ -39,9 +39,6 @@ and faces, the variables `git-gutter:view-diff-function`,
 
 - [#244](https://github.com/emacsorphanage/git-gutter/pull/244): support
   for jj. The new test does not parse, and live update does not work yet.
-- [#241](https://github.com/emacsorphanage/git-gutter/pull/241): a sign
-  for staged changes. It places the signs by the line numbers of the
-  index instead of the buffer.
 
 ### Installing this fork
 
@@ -353,6 +350,29 @@ Like following.
 ```
 
 Default value of `git-gutter:unchanged-sign` is `nil`.
+
+### Show staged changes
+
+With git, `git-gutter.el` can mark lines whose changes are staged, that
+is, already in the index, with their own sign and face. Set
+`git-gutter:staged-sign`:
+
+```lisp
+(custom-set-variables
+ '(git-gutter:staged-sign "*"))
+(set-face-foreground 'git-gutter:staged "cyan")
+```
+
+A line that is staged and then changed again shows the modified sign.
+`git-gutter:stage-hunk` and `git-gutter:revert-hunk` do nothing on a
+staged hunk, and `git-gutter:statistic` does not count it.
+
+Staged signs cost a second `git diff` process on every update. They are
+not shown when `git-gutter:start-revision` is set, and live updating
+(`git-gutter:update-interval` above 0) removes them until the next
+update, for example when you save the buffer.
+
+Default value of `git-gutter:staged-sign` is `nil`.
 
 ### Show a separator column
 

@@ -18,6 +18,10 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
   ([#230](https://github.com/emacsorphanage/git-gutter/pull/230)).
 - The signs are updated when a window showing the buffer is selected,
   for example with `other-window` (`window-selection-change-functions`).
+- `git-gutter:staged-sign` and the face `git-gutter:staged` mark lines
+  whose changes are staged, for git
+  ([#241](https://github.com/emacsorphanage/git-gutter/pull/241)). Off by
+  default.
 - README: theming the gutter column background
   ([#247](https://github.com/emacsorphanage/git-gutter/pull/247)).
 
