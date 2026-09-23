@@ -11,6 +11,8 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
 
 ## [Unreleased]
 
+## [0.94.1] - 2026-09-23
+
 ### Fixed
 
 - `git-gutter:statistic` counted one line too few for each added hunk
@@ -28,6 +30,8 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
 - Live update wrote the buffer in another coding system when the buffer
   had a character that `buffer-file-coding-system` cannot encode, so
   every line with a non-ASCII character showed as changed.
+- Byte-compilation warning: `define-global-minor-mode`, obsolete since
+  Emacs 31.1.
 
 ## [0.94.0] - 2026-09-23
 
@@ -124,5 +128,6 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
   `when-let`, obsolete since Emacs 31.1
   ([#236](https://github.com/emacsorphanage/git-gutter/pull/236)).
 
-[Unreleased]: https://github.com/alberti42/fork-git-gutter/compare/0.94.0...HEAD
+[Unreleased]: https://github.com/alberti42/fork-git-gutter/compare/0.94.1...HEAD
+[0.94.1]: https://github.com/alberti42/fork-git-gutter/compare/0.94.0...0.94.1
 [0.94.0]: https://github.com/alberti42/fork-git-gutter/compare/0.93...0.94.0
