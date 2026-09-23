@@ -35,11 +35,6 @@ and faces, the variables `git-gutter:view-diff-function`,
 `git-gutter:clear-function` and `git-gutter:init-function`, and the
 `git-gutter-hunk` structure; git-gutter-fringe uses the last two groups.
 
-### Still open
-
-- [#244](https://github.com/emacsorphanage/git-gutter/pull/244): support
-  for jj. The new test does not parse, and live update does not work yet.
-
 ### Installing this fork
 
 MELPA builds the upstream repository, so `M-x package-install` installs
@@ -301,6 +296,20 @@ Default value of `git-gutter:handled-backends` is `'(git)`. If you want to use
 (custom-set-variables
  '(git-gutter:handled-backends '(git hg bzr svn jj)))
 ```
+
+`git-gutter.el` uses the first backend in `git-gutter:handled-backends`
+that recognizes the file's directory. A jj repository created with
+`jj git init` also contains a `.git` directory, so git recognizes it too.
+To use jj there, put `jj` before `git`:
+
+```lisp
+(custom-set-variables
+ '(git-gutter:handled-backends '(jj git)))
+```
+
+With jj, the signs show the changes of the working-copy commit, that is,
+the difference from its parent `@-`. `git-gutter:set-start-revision`
+takes a jj revision, such as `@--`.
 
 ### Updates hooks
 

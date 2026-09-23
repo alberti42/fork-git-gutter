@@ -22,6 +22,10 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
   whose changes are staged, for git
   ([#241](https://github.com/emacsorphanage/git-gutter/pull/241)). Off by
   default.
+- Support for [Jujutsu](https://github.com/jj-vcs/jj) (`jj`), with the
+  user option `git-gutter:jj-diff-option`. Add `jj` to
+  `git-gutter:handled-backends` to use it
+  ([#244](https://github.com/emacsorphanage/git-gutter/pull/244)).
 - README: theming the gutter column background
   ([#247](https://github.com/emacsorphanage/git-gutter/pull/247)).
 
@@ -87,6 +91,8 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
   of lines: 1.5 s for a 20000-line file with one hunk, 20.4 s with 2000
   hunks. It now takes 0.016 s and 0.028 s
   ([#243](https://github.com/emacsorphanage/git-gutter/pull/243)).
+- Live update showed no changes when the file's directory was reached
+  through a symbolic link, for example under `/tmp` or `/var` on macOS.
 - Byte-compilation warnings: missing `lexical-binding` cookie, and
   `when-let`, obsolete since Emacs 31.1
   ([#236](https://github.com/emacsorphanage/git-gutter/pull/236)).
