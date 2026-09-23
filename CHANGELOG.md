@@ -46,6 +46,12 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
   rows of a wrapped line with a `wrap-prefix`, instead of one overlay per
   visual row ([#248](https://github.com/emacsorphanage/git-gutter/pull/248)).
 
+- Live update (`git-gutter:update-interval` above 0) reads the original
+  version of the file once, and again after each full update, instead of
+  on every update; Emacs waits 4.4 ms per live update on a 2000-line
+  file instead of 24.6 ms. `git-gutter:update-interval` accepts
+  fractions of a second, such as 0.1.
+
 ### Deprecated
 
 - `git-gutter:linum-setup` does nothing except show a warning. Use
@@ -93,6 +99,7 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
   ([#243](https://github.com/emacsorphanage/git-gutter/pull/243)).
 - Live update showed no changes when the file's directory was reached
   through a symbolic link, for example under `/tmp` or `/var` on macOS.
+- Live update removed all signs when `diff` failed.
 - Byte-compilation warnings: missing `lexical-binding` cookie, and
   `when-let`, obsolete since Emacs 31.1
   ([#236](https://github.com/emacsorphanage/git-gutter/pull/236)).
