@@ -585,4 +585,91 @@ on."
          (with-current-buffer buf (set-buffer-modified-p nil))
          (kill-buffer buf))))))
 
+;; jj backend.  These tests need the jj program and skip without it.
+
+(defmacro git-gutter-test:with-jj-repo (&rest body)
+  "Run BODY in a new jj repository, with jj configured only by the test."
+  (declare (indent 0))
+  `(with-temporary-directory
+    (lambda ()
+      (let ((process-environment (copy-sequence process-environment)))
+        (with-temp-file "jj-config.toml")
+        (setenv "JJ_CONFIG" (expand-file-name "jj-config.toml"))
+        (setenv "JJ_USER" "test")
+        (setenv "JJ_EMAIL" "test@example.com")
+        (make-directory "repo")
+        (let ((default-directory (file-name-as-directory (expand-file-name "repo"))))
+          (git-gutter-test:jj "git" "init" ".")
+          ,@body)))))
+
+(defun git-gutter-test:jj (&rest args)
+  "Run jj with ARGS in `default-directory'; signal an error on failure."
+  (with-temp-buffer
+    (unless (zerop (apply #'process-file "jj" nil t nil args))
+      (error "jj %S failed: %s" args (buffer-string)))
+    (buffer-string)))
+
+(defun git-gutter-test:jj-hunks (file &optional change-buffer)
+  "Open FILE with the jj backend and return its hunks as (TYPE START-LINE).
+With CHANGE-BUFFER, call it in the buffer and run a live update."
+  (let* ((git-gutter:handled-backends '(jj))
+         (buf (find-file-noselect file)))
+    (unwind-protect
+        (with-current-buffer buf
+          (git-gutter-mode 1)
+          (with-timeout (10 (error "git-gutter did not finish"))
+            (while (not git-gutter:enabled)
+              (accept-process-output nil 0.1)))
+          (when change-buffer
+            (funcall change-buffer)
+            (git-gutter:live-update)
+            (with-timeout (10 (error "live update did not finish"))
+              (while (get-buffer (git-gutter:diff-process-buffer
+                                  (file-name-nondirectory file)))
+                (accept-process-output nil 0.1))))
+          (mapcar (lambda (h)
+                    (list (git-gutter-hunk-type h) (git-gutter-hunk-start-line h)))
+                  git-gutter:diffinfos))
+      (with-current-buffer buf (set-buffer-modified-p nil))
+      (kill-buffer buf))))
+
+(ert-deftest git-gutter:jj-diff-saved-change ()
+  "A saved change shows, also in a subdirectory file with parentheses."
+  (skip-unless (executable-find "jj"))
+  (git-gutter-test:with-jj-repo
+    (make-directory "sub dir")
+    (git-gutter-test:write-lines "sub dir/a (1).txt" '("1" "2" "3" "4" "5"))
+    (git-gutter-test:jj "commit" "-m" "init")
+    (git-gutter-test:write-lines "sub dir/a (1).txt" '("1" "2" "THREE" "4" "5"))
+    (should (equal (git-gutter-test:jj-hunks (expand-file-name "sub dir/a (1).txt"))
+                   '((modified 3))))))
+
+(ert-deftest git-gutter:jj-start-revision ()
+  "With a start revision, the file is compared with that revision."
+  (skip-unless (executable-find "jj"))
+  (git-gutter-test:with-jj-repo
+    (git-gutter-test:write-lines "f.txt" '("1" "2" "3" "4" "5"))
+    (git-gutter-test:jj "commit" "-m" "init")
+    (git-gutter-test:write-lines "f.txt" '("1" "TWO" "3" "4" "5"))
+    (git-gutter-test:jj "commit" "-m" "second")
+    (git-gutter-test:write-lines "f.txt" '("1" "TWO" "3" "FOUR" "5"))
+    (let ((git-gutter:start-revision "@--"))
+      (should (equal (git-gutter-test:jj-hunks (expand-file-name "f.txt"))
+                     '((modified 2) (modified 4)))))))
+
+(ert-deftest git-gutter:jj-live-update ()
+  "Live update shows an unsaved change."
+  (skip-unless (executable-find "jj"))
+  (git-gutter-test:with-jj-repo
+    (make-directory "sub")
+    (git-gutter-test:write-lines "sub/f.txt" '("1" "2" "3" "4" "5"))
+    (git-gutter-test:jj "commit" "-m" "init")
+    (should (equal (git-gutter-test:jj-hunks
+                    (expand-file-name "sub/f.txt")
+                    (lambda ()
+                      (goto-char (point-min))
+                      (delete-region (point) (line-end-position))
+                      (insert "ONE")))
+                   '((modified 1))))))
+
 ;;; test-git-gutter.el end here
