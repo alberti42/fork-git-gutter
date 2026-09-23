@@ -4,6 +4,7 @@
 [![melpa badge][melpa-badge]][melpa-link]
 [![melpa stable badge][melpa-stable-badge]][melpa-stable-link]
 -->
+![Made for GNU Emacs](https://img.shields.io/badge/Made%20for-GNU%20Emacs-7F5AB6?logo=gnuemacs&logoColor=white)
 [![gh actions badge][gh-actions-badge]][gh-actions-link]
 
 ## Status of this fork
