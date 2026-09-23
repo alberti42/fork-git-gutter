@@ -585,7 +585,16 @@ on."
          (with-current-buffer buf (set-buffer-modified-p nil))
          (kill-buffer buf))))))
 
-;; jj backend.  These tests need the jj program and skip without it.
+;; jj backend.  These tests need the jj program and skip without it,
+;; unless GIT_GUTTER_TEST_REQUIRE_JJ is set, as in the CI jobs that
+;; install jj; then a missing jj fails the tests.
+
+(defun git-gutter-test:require-jj ()
+  "Skip the current test if jj is missing, or fail if CI requires jj."
+  (unless (executable-find "jj")
+    (when (getenv "GIT_GUTTER_TEST_REQUIRE_JJ")
+      (error "GIT_GUTTER_TEST_REQUIRE_JJ is set, but jj is not installed"))
+    (ert-skip "jj is not installed")))
 
 (defmacro git-gutter-test:with-jj-repo (&rest body)
   "Run BODY in a new jj repository, with jj configured only by the test."
@@ -635,7 +644,7 @@ With CHANGE-BUFFER, call it in the buffer and run a live update."
 
 (ert-deftest git-gutter:jj-diff-saved-change ()
   "A saved change shows, also in a subdirectory file with parentheses."
-  (skip-unless (executable-find "jj"))
+  (git-gutter-test:require-jj)
   (git-gutter-test:with-jj-repo
     (make-directory "sub dir")
     (git-gutter-test:write-lines "sub dir/a (1).txt" '("1" "2" "3" "4" "5"))
@@ -646,7 +655,7 @@ With CHANGE-BUFFER, call it in the buffer and run a live update."
 
 (ert-deftest git-gutter:jj-start-revision ()
   "With a start revision, the file is compared with that revision."
-  (skip-unless (executable-find "jj"))
+  (git-gutter-test:require-jj)
   (git-gutter-test:with-jj-repo
     (git-gutter-test:write-lines "f.txt" '("1" "2" "3" "4" "5"))
     (git-gutter-test:jj "commit" "-m" "init")
@@ -659,7 +668,7 @@ With CHANGE-BUFFER, call it in the buffer and run a live update."
 
 (ert-deftest git-gutter:jj-live-update ()
   "Live update shows an unsaved change."
-  (skip-unless (executable-find "jj"))
+  (git-gutter-test:require-jj)
   (git-gutter-test:with-jj-repo
     (make-directory "sub")
     (git-gutter-test:write-lines "sub/f.txt" '("1" "2" "3" "4" "5"))
