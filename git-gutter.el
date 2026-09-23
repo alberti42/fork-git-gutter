@@ -285,7 +285,7 @@ Argument TEST is the case before BODY execution."
   "^@@ -\\(?:[0-9]+\\),?\\([0-9]*\\) \\+\\([0-9]+\\),?\\([0-9]*\\) @@"
   "Parse diff output.")
 
-(defun git-gutter:process-diff-output (buf &optional staged-type)
+(defun git-gutter:process-diff-output (buf)
   (when (buffer-live-p buf)
     (with-current-buffer buf
       (goto-char (point-min))
@@ -293,11 +293,10 @@ Argument TEST is the case before BODY execution."
                for new-line  = (string-to-number (match-string 2))
                for orig-changes = (git-gutter:changes-to-number (match-string 1))
                for new-changes = (git-gutter:changes-to-number (match-string 3))
-               for base-type = (cond ((zerop orig-changes) 'added)
-                                     ((zerop new-changes) 'deleted)
-                                     (t 'modified))
-               for type = (if staged-type 'staged base-type)
-               for end-line = (if (eq base-type 'deleted)
+               for type = (cond ((zerop orig-changes) 'added)
+                                ((zerop new-changes) 'deleted)
+                                (t 'modified))
+               for end-line = (if (eq type 'deleted)
                                   new-line
                                 (1- (+ new-line new-changes)))
                for content = (git-gutter:diff-content)
@@ -334,12 +333,10 @@ Argument TEST is the case before BODY execution."
            "diff" "--no-color" "--no-ext-diff" "--relative" "-U0"
            arg)))
 
-(defun git-gutter:start-git-staged-diff-process (file proc-buf)
-  (let ((arg (git-gutter:git-diff-arguments file)))
-    (apply #'start-file-process "git-gutter-staged" proc-buf
-           "git" "--no-pager" "-c" "diff.autorefreshindex=0"
-           "diff" "--cached" "--no-color" "--no-ext-diff" "--relative" "-U0"
-           arg)))
+(defun git-gutter:start-git-head-diff-process (file proc-buf)
+  "Diff FILE in the working tree against HEAD, with output to PROC-BUF."
+  (let ((git-gutter:start-revision "HEAD"))
+    (git-gutter:start-git-diff-process file proc-buf)))
 
 (defun git-gutter:svn-diff-arguments (file)
   (let (args)
@@ -391,9 +388,6 @@ Argument TEST is the case before BODY execution."
       (hg (git-gutter:start-hg-diff-process file proc-buf))
       (bzr (git-gutter:start-bzr-diff-process file proc-buf)))))
 
-(defvar-local git-gutter:staged-diffinfos nil)
-(defvar-local git-gutter:pending-processes 0)
-
 (defun git-gutter:show-staged-p ()
   "Non-nil when staged signs are shown in the current buffer."
   (and git-gutter:staged-sign
@@ -421,87 +415,74 @@ Argument TEST is the case before BODY execution."
                  (setq git-gutter:enabled t)))
              (kill-buffer proc-buf))))))))
 
-(defun git-gutter:combine-diff-results (working-diff staged-diff)
-  "Combine working directory and staged diffs, prioritizing staged changes."
-  (let ((combined-hunks nil)
-        (staged-lines (make-hash-table)))
-    ;; First, collect all lines that are staged
-    (dolist (hunk staged-diff)
-      (let ((start (git-gutter-hunk-start-line hunk))
-            (end (git-gutter-hunk-end-line hunk)))
-        (cl-loop for line from start to end do
-                 (puthash line t staged-lines))))
-    
-    ;; Add all staged changes first
-    (setq combined-hunks (append combined-hunks staged-diff))
-    
-    ;; Add working directory changes only if they don't overlap with staged changes
-    (dolist (hunk working-diff)
-      (let ((start (git-gutter-hunk-start-line hunk))
-            (end (git-gutter-hunk-end-line hunk))
-            (overlaps nil))
-        (cl-loop for line from start to end do
-                 (when (gethash line staged-lines)
-                   (setq overlaps t)))
-        (unless overlaps
-          (push hunk combined-hunks))))
-    
-    (sort combined-hunks (lambda (a b)
-                          (< (git-gutter-hunk-start-line a)
-                             (git-gutter-hunk-start-line b))))))
+(defun git-gutter:staged-hunks (head-hunks unstaged-hunks)
+  "Return the parts of HEAD-HUNKS that are not in UNSTAGED-HUNKS.
+HEAD-HUNKS are the changes since HEAD and UNSTAGED-HUNKS the changes not
+in the index.  Both come from diffs against the working tree, so their
+line numbers are the buffer's.  A line changed since HEAD but not
+unstaged is staged.  The result has type `staged'."
+  (let ((unstaged-lines (make-hash-table))
+        staged)
+    (dolist (hunk unstaged-hunks)
+      (cl-loop for line from (git-gutter-hunk-start-line hunk)
+               to (git-gutter-hunk-end-line hunk)
+               do (puthash line t unstaged-lines)))
+    (dolist (hunk head-hunks)
+      (let (run-start)
+        (cl-loop for line from (git-gutter-hunk-start-line hunk)
+                 to (1+ (git-gutter-hunk-end-line hunk))
+                 do (if (and (<= line (git-gutter-hunk-end-line hunk))
+                             (not (gethash line unstaged-lines)))
+                        (unless run-start (setq run-start line))
+                      (when run-start
+                        (push (make-git-gutter-hunk
+                               :type 'staged
+                               :content (git-gutter-hunk-content hunk)
+                               :start-line run-start :end-line (1- line))
+                              staged)
+                        (setq run-start nil))))))
+    (nreverse staged)))
 
 (defun git-gutter:start-combined-git-diff-process (curfile proc-buf)
-  "Start git diff process and update diff information.
-CURFILE is the name of current file.
-PROC-BUF is the buffer for git-diff process."
-  (let ((file (git-gutter:base-file))
-        (curbuf (current-buffer))
-        (working-proc-buf (concat (buffer-name proc-buf) "-working"))
-        (staged-proc-buf (concat (buffer-name proc-buf) "-staged")))
-    (setq git-gutter:pending-processes 2)
-    (setq git-gutter:staged-diffinfos nil)
-    
-    ;; Start working directory diff
-    (get-buffer-create working-proc-buf)
-    (let ((working-process (git-gutter:start-git-diff-process curfile working-proc-buf)))
-      (set-process-query-on-exit-flag working-process nil)
-      (set-process-sentinel
-       working-process
-       (lambda (proc _event)
-         (when (eq (process-status proc) 'exit)
-           (let ((working-diffinfos (git-gutter:process-diff-output (process-buffer proc))))
-             (with-current-buffer curbuf
-               (setq git-gutter:diffinfos working-diffinfos)
-               (cl-decf git-gutter:pending-processes)
-               (when (zerop git-gutter:pending-processes)
-                 (git-gutter:finalize-combined-diff file))
-               (kill-buffer (process-buffer proc))))))))
-    
-    ;; Start staged diff
-    (get-buffer-create staged-proc-buf)
-    (let ((staged-process (git-gutter:start-git-staged-diff-process curfile staged-proc-buf)))
-      (set-process-query-on-exit-flag staged-process nil)
-      (set-process-sentinel
-       staged-process
-       (lambda (proc _event)
-         (when (eq (process-status proc) 'exit)
-           (let ((staged-diffinfos (git-gutter:process-diff-output (process-buffer proc) t)))
-             (with-current-buffer curbuf
-               (setq git-gutter:staged-diffinfos staged-diffinfos)
-               (cl-decf git-gutter:pending-processes)
-               (when (zerop git-gutter:pending-processes)
-                 (git-gutter:finalize-combined-diff file))
-               (kill-buffer (process-buffer proc))))))))
-    
-    (kill-buffer proc-buf)))
-
-(defun git-gutter:finalize-combined-diff (file)
-  (setq git-gutter:enabled nil)
-  (let ((combined-diffinfos (git-gutter:combine-diff-results git-gutter:diffinfos git-gutter:staged-diffinfos)))
-    (git-gutter:update-diffinfo combined-diffinfos)
-    (when git-gutter:has-indirect-buffers
-      (git-gutter:update-indirect-buffers file))
-    (setq git-gutter:enabled t)))
+  "Diff CURFILE against the index and against HEAD, and show both.
+PROC-BUF stays alive until both processes finish, so that `git-gutter'
+does not start another pair of processes meanwhile."
+  (let* ((file (git-gutter:base-file))
+         (curbuf (current-buffer))
+         (unstaged-buf (get-buffer-create (concat (buffer-name proc-buf) "-unstaged")))
+         (head-buf (get-buffer-create (concat (buffer-name proc-buf) "-head")))
+         (unstaged :pending)
+         (head :pending)
+         (finish
+          (lambda ()
+            (unless (or (eq unstaged :pending) (eq head :pending))
+              (when (buffer-live-p curbuf)
+                (with-current-buffer curbuf
+                  (setq git-gutter:enabled nil)
+                  (git-gutter:update-diffinfo
+                   (sort (append unstaged (git-gutter:staged-hunks head unstaged))
+                         (lambda (a b)
+                           (< (git-gutter-hunk-start-line a)
+                              (git-gutter-hunk-start-line b)))))
+                  (when git-gutter:has-indirect-buffers
+                    (git-gutter:update-indirect-buffers file))
+                  (setq git-gutter:enabled t)))
+              (when (buffer-live-p proc-buf)
+                (kill-buffer proc-buf))))))
+    (dolist (spec (list (list unstaged-buf #'git-gutter:start-git-diff-process
+                              (lambda (hunks) (setq unstaged hunks)))
+                        (list head-buf #'git-gutter:start-git-head-diff-process
+                              (lambda (hunks) (setq head hunks)))))
+      (let ((process (funcall (nth 1 spec) curfile (nth 0 spec)))
+            (store (nth 2 spec)))
+        (set-process-query-on-exit-flag process nil)
+        (set-process-sentinel
+         process
+         (lambda (proc _event)
+           (when (memq (process-status proc) '(exit signal))
+             (funcall store (git-gutter:process-diff-output (process-buffer proc)))
+             (kill-buffer (process-buffer proc))
+             (funcall finish))))))))
 
 (defsubst git-gutter:gutter-seperator ()
   (when git-gutter:separator-sign

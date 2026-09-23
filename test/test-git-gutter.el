@@ -428,4 +428,101 @@ bar
     (should (equal (git-gutter-test:unchanged-overlay-lines '((3 . 4)))
                    '(1 2 5 6 7 8 9 10)))))
 
+;; Staged signs.
+
+(defun git-gutter-test:write-lines (file lines)
+  "Write LINES, a list of strings, to FILE, one per line."
+  (with-temp-file file
+    (dolist (line lines) (insert line "\n"))))
+
+(defun git-gutter-test:hunks-with-staged (setup)
+  "Commit f.txt with lines 1..10, call SETUP, and return the hunks.
+SETUP changes, stages and commits files in `default-directory'.  The
+result lists (TYPE START-LINE END-LINE) for each hunk, with staged signs
+on."
+  (let (result)
+    (with-temporary-directory
+     (lambda ()
+       (git-gutter-test:git "init" "-q")
+       (git-gutter-test:write-lines "f.txt" (mapcar #'number-to-string (number-sequence 1 10)))
+       (git-gutter-test:git "add" "f.txt")
+       (git-gutter-test:git "commit" "-q" "-m" "init")
+       (funcall setup)
+       (let* ((git-gutter:staged-sign "*")
+              (buf (find-file-noselect (expand-file-name "f.txt"))))
+         (unwind-protect
+             (with-current-buffer buf
+               (git-gutter-mode 1)
+               (with-timeout (10 (error "git-gutter did not finish"))
+                 (while (not git-gutter:enabled)
+                   (accept-process-output nil 0.1)))
+               (setq result
+                     (mapcar (lambda (h)
+                               (list (git-gutter-hunk-type h)
+                                     (git-gutter-hunk-start-line h)
+                                     (git-gutter-hunk-end-line h)))
+                             git-gutter:diffinfos)))
+           (kill-buffer buf)))))
+    result))
+
+(ert-deftest git-gutter:staged-sign-with-unstaged-lines-above ()
+  "A staged change keeps its line when unstaged lines are added above it."
+  (should (equal (git-gutter-test:hunks-with-staged
+                  (lambda ()
+                    (git-gutter-test:write-lines
+                     "f.txt" '("1" "2" "3" "4" "5" "6" "7" "EIGHT" "9" "10"))
+                    (git-gutter-test:git "add" "f.txt")
+                    (git-gutter-test:write-lines
+                     "f.txt" '("new1" "new2" "new3"
+                               "1" "2" "3" "4" "5" "6" "7" "EIGHT" "9" "10"))))
+                 '((added 1 3) (staged 11 11)))))
+
+(ert-deftest git-gutter:staged-sign-line-changed-again ()
+  "A staged line that is changed again shows the unstaged sign only."
+  (should (equal (git-gutter-test:hunks-with-staged
+                  (lambda ()
+                    (git-gutter-test:write-lines
+                     "f.txt" '("1" "2" "3" "4" "FIVE" "6" "7" "8" "9" "10"))
+                    (git-gutter-test:git "add" "f.txt")
+                    (git-gutter-test:write-lines
+                     "f.txt" '("1" "2" "3" "4" "five" "6" "7" "8" "9" "10"))))
+                 '((modified 5 5)))))
+
+(ert-deftest git-gutter:staged-sign-off-by-default ()
+  "Without `git-gutter:staged-sign', a staged change shows no sign."
+  (let (hunks)
+    (with-temporary-directory
+     (lambda ()
+       (git-gutter-test:git "init" "-q")
+       (git-gutter-test:write-lines "f.txt" '("1" "2" "3"))
+       (git-gutter-test:git "add" "f.txt")
+       (git-gutter-test:git "commit" "-q" "-m" "init")
+       (git-gutter-test:write-lines "f.txt" '("1" "TWO" "3"))
+       (git-gutter-test:git "add" "f.txt")
+       (let ((buf (find-file-noselect (expand-file-name "f.txt"))))
+         (unwind-protect
+             (with-current-buffer buf
+               (should-not git-gutter:staged-sign)
+               (git-gutter-mode 1)
+               (with-timeout (10 (error "git-gutter did not finish"))
+                 (while (not git-gutter:enabled)
+                   (accept-process-output nil 0.1)))
+               (setq hunks git-gutter:diffinfos))
+           (kill-buffer buf)))))
+    (should-not hunks)))
+
+(ert-deftest git-gutter:staged-hunks ()
+  "Lines changed since HEAD but not unstaged become staged hunks."
+  (let ((staged (git-gutter:staged-hunks
+                 (list (make-git-gutter-hunk :type 'modified :content ""
+                                             :start-line 5 :end-line 10))
+                 (list (make-git-gutter-hunk :type 'modified :content ""
+                                             :start-line 7 :end-line 8)))))
+    (should (equal (mapcar (lambda (h)
+                             (list (git-gutter-hunk-type h)
+                                   (git-gutter-hunk-start-line h)
+                                   (git-gutter-hunk-end-line h)))
+                           staged)
+                   '((staged 5 6) (staged 9 10))))))
+
 ;;; test-git-gutter.el end here
