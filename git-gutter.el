@@ -441,7 +441,7 @@ Argument TEST is the case before BODY execution."
            when (overlay-get ov 'linum-str)
            return ov))
 
-(defun git-gutter:put-signs-linum (sign points)
+(defun git-gutter:put-signs-linum (sign points &optional wrap-sign)
   (dolist (pos points)
     (git-gutter:awhen (git-gutter:linum-get-overlay pos)
       (overlay-put it 'before-string
@@ -454,7 +454,7 @@ Argument TEST is the case before BODY execution."
         (when (string-match-p "\\S-" raw)
           (overlay-put it 'priority 10)))
       (when git-gutter:visual-line
-        (let ((wp (git-gutter:wrap-prefix-for-sign sign pos)))
+        (let ((wp (git-gutter:wrap-prefix-for-sign (or wrap-sign sign) pos)))
             (overlay-put it 'wrap-prefix wp))))))
 
 (defun git-gutter:wrap-prefix-for-sign (sign pos)
@@ -465,9 +465,12 @@ preserved on wrapped rows."
   (let ((existing (get-text-property pos 'wrap-prefix)))
     (concat (git-gutter:before-string sign) (if (stringp existing) existing ""))))
 
-(defun git-gutter:put-signs (sign points)
+(defun git-gutter:put-signs (sign points &optional wrap-sign)
+  "Put SIGN at each position in POINTS.
+When `git-gutter:visual-line' is non-nil, continuation rows show WRAP-SIGN,
+or SIGN if WRAP-SIGN is nil."
   (if git-gutter:linum-enabled
-      (git-gutter:put-signs-linum sign points)
+      (git-gutter:put-signs-linum sign points wrap-sign)
     (dolist (pos points)
       (let* ((eol (when git-gutter:visual-line
                     (save-excursion (goto-char pos) (line-end-position))))
@@ -480,7 +483,8 @@ preserved on wrapped rows."
           (when (string-match-p "\\S-" raw)
             (overlay-put ov 'priority 10)))
         (when eol
-          (overlay-put ov 'wrap-prefix (git-gutter:wrap-prefix-for-sign sign pos)))
+          (overlay-put ov 'wrap-prefix
+                       (git-gutter:wrap-prefix-for-sign (or wrap-sign sign) pos)))
         (overlay-put ov 'git-gutter t)))))
 
 (defsubst git-gutter:sign-width (sign)
@@ -502,12 +506,14 @@ preserved on wrapped rows."
            for end = (git-gutter-hunk-end-line info)
            never (and (>= line start) (<= line end))))
 
+(defun git-gutter:propertized-unchanged-sign ()
+  (if git-gutter:unchanged-sign
+      (propertize git-gutter:unchanged-sign 'face 'git-gutter:unchanged)
+    " "))
+
 (defun git-gutter:view-for-unchanged (diffinfos)
   (save-excursion
-    (let ((sign (if git-gutter:unchanged-sign
-                    (propertize git-gutter:unchanged-sign
-                                'face 'git-gutter:unchanged)
-                  " "))
+    (let ((sign (git-gutter:propertized-unchanged-sign))
           points)
       (goto-char (point-min))
       (while (not (eobp))
@@ -680,7 +686,9 @@ preserved on wrapped rows."
                     (forward-line 1))
                   (git-gutter:put-signs sign points))
                  (deleted
-                  (git-gutter:put-signs sign (list (point)))
+                  ;; The line itself is unchanged; mark only its first row.
+                  (git-gutter:put-signs sign (list (point))
+                                        (git-gutter:propertized-unchanged-sign))
                   (forward-line 1)))
                (setq curline (1+ end-line))))))
 
