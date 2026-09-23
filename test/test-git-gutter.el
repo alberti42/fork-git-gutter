@@ -214,7 +214,7 @@ bar
 
     (let* ((git-gutter:start-revision "30000")
            (got (git-gutter:jj-diff-arguments file)))
-      (should (equal got '("-a" "-b" "-c" "-r" "30000" "git-gutter.el"))))))
+      (should (equal got '("-a" "-b" "-c" "--from" "30000" "git-gutter.el"))))))
 
 (ert-deftest git-gutter-read-header ()
   "Read header of diff hunk"

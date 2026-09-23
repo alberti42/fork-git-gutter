@@ -392,8 +392,8 @@ Argument TEST is the case before BODY execution."
     (unless (string= git-gutter:jj-diff-option "")
       (setq args (nreverse (split-string git-gutter:jj-diff-option))))
     (when (git-gutter:revision-set-p)
-        (push "-r" args)
-        (push git-gutter:start-revision args))
+      (push "--from" args)
+      (push git-gutter:start-revision args))
     (nreverse (cons file args))))
 
 (defsubst git-gutter:start-jj-diff-process (file proc-buf)
