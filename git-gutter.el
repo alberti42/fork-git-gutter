@@ -823,6 +823,12 @@ WINDOW is deselected; then it does nothing."
 (defsubst git-gutter:diff-process-buffer (curfile)
   (concat " *git-gutter-" curfile "-*"))
 
+(defun git-gutter--live-update-process-buffer (file)
+  "Name of the process buffer of live update for FILE, an absolute name.
+It differs from the name of the full update's process buffer, and from
+that of another file with the same base name."
+  (concat " *git-gutter-live-" file "-*"))
+
 (defun git-gutter:kill-buffer-hook ()
   (git-gutter--delete-buffer-temp-files)
   (let ((buf (git-gutter:diff-process-buffer (git-gutter:base-file))))
@@ -1416,7 +1422,8 @@ start revision."
                         "diff" "-U0" original now)))
 
 (defun git-gutter:start-live-update (file original now)
-  (let ((proc-bufname (git-gutter:diff-process-buffer file)))
+  "Start diff of ORIGINAL and NOW, the versions of FILE, an absolute name."
+  (let ((proc-bufname (git-gutter--live-update-process-buffer file)))
     (let* ((curbuf (current-buffer))
            (update (cl-incf git-gutter--last-update))
            (proc-buf (get-buffer-create proc-bufname))
@@ -1519,8 +1526,7 @@ for the repository root and once for the original version of FILE."
 
 (defun git-gutter:live-update ()
   (git-gutter:awhen (git-gutter:base-file)
-    (let ((proc-buf (get-buffer (git-gutter:diff-process-buffer
-                                 (file-name-nondirectory it)))))
+    (let ((proc-buf (get-buffer (git-gutter--live-update-process-buffer it))))
       (if (and proc-buf (get-buffer-process proc-buf))
           ;; The previous diff still reads `git-gutter--live-update-file';
           ;; its sentinel runs this function again.
@@ -1532,7 +1538,7 @@ for the repository root and once for the original version of FILE."
                          (file-exists-p git-gutter--live-update-file))
               (setq git-gutter--live-update-file (make-temp-file "git-gutter-cur")))
             (git-gutter:write-current-content git-gutter--live-update-file)
-            (git-gutter:start-live-update (file-name-nondirectory (git-gutter:base-file))
+            (git-gutter:start-live-update (git-gutter:base-file)
                                           it git-gutter--live-update-file)))))))
 
 (defun git-gutter:all-hunks ()

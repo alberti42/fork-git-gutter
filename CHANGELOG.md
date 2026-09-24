@@ -23,6 +23,9 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
 - A new major mode, for example after `revert-buffer` or `normal-mode`,
   left live update's temporary files: the new mode removes all local
   variables, and with them the names of these files.
+- Live update in a buffer stopped the live update of another buffer
+  whose file has the same name in another directory, so that buffer's
+  signs were not updated until its next live update.
 
 ## [0.94.2] - 2026-09-23
 

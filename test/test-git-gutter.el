@@ -810,7 +810,7 @@ on."
              (insert "ONE")
              (git-gutter:live-update)
              (with-timeout (10 (error "live update did not finish"))
-               (while (get-buffer (git-gutter:diff-process-buffer "f.txt"))
+               (while (get-buffer (git-gutter--live-update-process-buffer (git-gutter:base-file)))
                  (accept-process-output nil 0.1)))
              (should (equal (mapcar #'git-gutter-hunk-start-line git-gutter:diffinfos)
                             '(1))))
@@ -825,8 +825,7 @@ on."
   (insert "x")
   (git-gutter:live-update)
   (with-timeout (10 (error "live update did not finish"))
-    (while (get-buffer (git-gutter:diff-process-buffer
-                        (file-name-nondirectory (git-gutter:base-file))))
+    (while (get-buffer (git-gutter--live-update-process-buffer (git-gutter:base-file)))
       (accept-process-output nil 0.1))))
 
 (ert-deftest git-gutter:live-update-cache ()
@@ -920,8 +919,7 @@ on."
   "Wait until no live update is running or due."
   (with-timeout (10 (error "live update did not finish"))
     (while (or git-gutter--live-update-pending
-               (get-buffer (git-gutter:diff-process-buffer
-                            (file-name-nondirectory (git-gutter:base-file)))))
+               (get-buffer (git-gutter--live-update-process-buffer (git-gutter:base-file))))
       (accept-process-output nil 0.1))))
 
 (ert-deftest git-gutter:live-update-one-temp-file ()
@@ -980,6 +978,41 @@ on."
       (should-not (file-exists-p original))
       (should-not (file-exists-p copy)))
     (set-buffer-modified-p nil)))
+
+(ert-deftest git-gutter:live-update-same-file-name ()
+  "Live updates of two files with the same name do not wait for each other."
+  (with-temporary-directory
+   (lambda ()
+     (git-gutter-test:git "init" "-q")
+     (make-directory "a")
+     (make-directory "b")
+     (with-temp-file "a/f.txt" (insert "1\n"))
+     (with-temp-file "b/f.txt" (insert "1\n"))
+     (git-gutter-test:git "add" ".")
+     (git-gutter-test:git "commit" "-q" "-m" "init")
+     (let ((bufs (list (find-file-noselect (expand-file-name "a/f.txt"))
+                       (find-file-noselect (expand-file-name "b/f.txt")))))
+       (unwind-protect
+           (progn
+             (dolist (buf bufs)
+               (with-current-buffer buf
+                 (git-gutter-mode 1)
+                 (with-timeout (10 (error "git-gutter did not finish"))
+                   (while (not git-gutter:enabled)
+                     (accept-process-output nil 0.1)))))
+             (dolist (buf bufs)
+               (with-current-buffer buf
+                 (goto-char (point-min))
+                 (insert "x")
+                 ;; B's live update starts while A's diff still runs.
+                 (git-gutter:live-update)
+                 (should-not git-gutter--live-update-pending)))
+             (dolist (buf bufs)
+               (with-current-buffer buf
+                 (git-gutter-test:wait-for-live-update)
+                 (should (equal (git-gutter-test:hunk-list) '((modified 1 1))))
+                 (set-buffer-modified-p nil))))
+         (mapc #'kill-buffer bufs))))))
 
 (ert-deftest git-gutter:write-current-content-coding ()
   "The current content is written in `buffer-file-coding-system'."
@@ -1107,8 +1140,7 @@ With CHANGE-BUFFER, call it in the buffer and run a live update."
             (funcall change-buffer)
             (git-gutter:live-update)
             (with-timeout (10 (error "live update did not finish"))
-              (while (get-buffer (git-gutter:diff-process-buffer
-                                  (file-name-nondirectory file)))
+              (while (get-buffer (git-gutter--live-update-process-buffer (git-gutter:base-file)))
                 (accept-process-output nil 0.1))))
           (mapcar (lambda (h)
                     (list (git-gutter-hunk-type h) (git-gutter-hunk-start-line h)))
