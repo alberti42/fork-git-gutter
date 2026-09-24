@@ -857,6 +857,9 @@ Use `display-line-numbers-mode' instead."
             (make-local-variable 'git-gutter:diffinfos)
             ;;(setq-local git-gutter:start-revision nil)
             (add-hook 'kill-buffer-hook 'git-gutter:kill-buffer-hook nil t)
+            ;; A new major mode kills all local variables, the cache too.
+            (add-hook 'change-major-mode-hook
+                      #'git-gutter--delete-buffer-temp-files nil t)
             (add-hook 'kill-emacs-hook #'git-gutter--delete-temp-files)
             (add-hook 'after-change-functions #'git-gutter--after-change nil t)
             (add-hook 'window-buffer-change-functions
@@ -876,6 +879,7 @@ Use `display-line-numbers-mode' instead."
         (git-gutter-mode -1))
     (git-gutter--delete-buffer-temp-files)
     (remove-hook 'kill-buffer-hook 'git-gutter:kill-buffer-hook t)
+    (remove-hook 'change-major-mode-hook #'git-gutter--delete-buffer-temp-files t)
     (remove-hook 'after-change-functions #'git-gutter--after-change t)
     (git-gutter--set-edited t)
     (dolist (hook git-gutter:update-hooks)

@@ -18,6 +18,12 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
   each update. It no longer starts a `diff` while the buffer's previous
   one is still running; it runs again when that one finishes.
 
+### Fixed
+
+- A new major mode, for example after `revert-buffer` or `normal-mode`,
+  left live update's temporary files: the new mode removes all local
+  variables, and with them the names of these files.
+
 ## [0.94.2] - 2026-09-23
 
 ### Fixed

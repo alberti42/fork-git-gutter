@@ -968,6 +968,19 @@ on."
       (should-not git-gutter--live-update-file))
     (set-buffer-modified-p nil)))
 
+(ert-deftest git-gutter:change-major-mode-deletes-temp-files ()
+  "A new major mode deletes live update's files before it kills the cache."
+  (git-gutter-test:with-file-in-repo
+    (git-gutter-test:live-update-and-wait)
+    (let ((original (cdr git-gutter:live-update-cache))
+          (copy git-gutter--live-update-file))
+      (should (file-exists-p original))
+      (should (file-exists-p copy))
+      (fundamental-mode)
+      (should-not (file-exists-p original))
+      (should-not (file-exists-p copy)))
+    (set-buffer-modified-p nil)))
+
 (ert-deftest git-gutter:write-current-content-coding ()
   "The current content is written in `buffer-file-coding-system'."
   (let ((file (make-temp-file "git-gutter-test")))
