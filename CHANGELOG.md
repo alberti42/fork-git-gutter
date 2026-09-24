@@ -26,6 +26,9 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
 - Live update in a buffer stopped the live update of another buffer
   whose file has the same name in another directory, so that buffer's
   signs were not updated until its next live update.
+- Killing an indirect buffer made with `clone-indirect-buffer` deleted
+  the base buffer's live update files, whose names the clone had copied,
+  and the base buffer's live updates failed until its next full update.
 
 ## [0.94.2] - 2026-09-23
 

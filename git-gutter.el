@@ -1297,6 +1297,12 @@ still show the right sign, and delete the others."
       (setq-local git-gutter:has-indirect-buffers 1))
     (with-current-buffer (apply oldfun base-buffer args)
       (add-hook 'kill-buffer-hook #'git-gutter:kill-indirect-buffer nil t)
+      ;; A clone copies the local variables of BASE-BUFFER.  It must not
+      ;; delete the base buffer's files, nor draw on its overlays.
+      (setq git-gutter:live-update-cache nil
+            git-gutter--live-update-file nil
+            git-gutter--live-update-pending nil
+            git-gutter--groups nil)
       (current-buffer))))
 (advice-add 'make-indirect-buffer :around #'git-gutter:make-indirect-buffer)
 

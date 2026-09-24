@@ -1014,6 +1014,27 @@ on."
                  (set-buffer-modified-p nil))))
          (mapc #'kill-buffer bufs))))))
 
+(ert-deftest git-gutter:clone-has-own-temp-files ()
+  "Killing a clone does not delete the base buffer's live update files."
+  (git-gutter-test:with-file-in-repo
+    (git-gutter-test:live-update-and-wait)
+    (let ((original (cdr git-gutter:live-update-cache))
+          (copy git-gutter--live-update-file)
+          (clone (clone-indirect-buffer nil nil)))
+      (with-current-buffer clone
+        (should-not git-gutter:live-update-cache)
+        (should-not git-gutter--live-update-file)
+        (should-not git-gutter--groups))
+      (kill-buffer clone)
+      (should (file-exists-p original))
+      (should (file-exists-p copy)))
+    (goto-char (point-max))
+    (insert "new\n")
+    (git-gutter:live-update)
+    (git-gutter-test:wait-for-live-update)
+    (should (equal (git-gutter-test:hunk-list) '((modified 1 2))))
+    (set-buffer-modified-p nil)))
+
 (ert-deftest git-gutter:write-current-content-coding ()
   "The current content is written in `buffer-file-coding-system'."
   (let ((file (make-temp-file "git-gutter-test")))
