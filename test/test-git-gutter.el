@@ -908,52 +908,64 @@ on."
                    '((modified 1 1))))
     (set-buffer-modified-p nil)))
 
-(ert-deftest git-gutter:live-update-deletes-temp-file-when-killed ()
-  "A live update stopped by the next one deletes its copy of the buffer."
+(defun git-gutter-test:hunk-list ()
+  "(TYPE START-LINE END-LINE) for each hunk in `git-gutter:diffinfos'."
+  (mapcar (lambda (hunk)
+            (list (git-gutter-hunk-type hunk)
+                  (git-gutter-hunk-start-line hunk)
+                  (git-gutter-hunk-end-line hunk)))
+          git-gutter:diffinfos))
+
+(defun git-gutter-test:wait-for-live-update ()
+  "Wait until no live update is running or due."
+  (with-timeout (10 (error "live update did not finish"))
+    (while (or git-gutter--live-update-pending
+               (get-buffer (git-gutter:diff-process-buffer
+                            (file-name-nondirectory (git-gutter:base-file)))))
+      (accept-process-output nil 0.1))))
+
+(ert-deftest git-gutter:live-update-one-temp-file ()
+  "Live update writes the buffer to one file, and runs again if it was due."
   (let ((temporary-file-directory
          (file-name-as-directory (make-temp-file "git-gutter-tmp" t))))
     (unwind-protect
-        (git-gutter-test:with-file-in-repo
-          (goto-char (point-min))
-          (insert "x")
-          (git-gutter:live-update)
-          ;; The first live update's diff is still running: the second
-          ;; one kills it.
-          (insert "y")
-          (git-gutter-test:live-update-and-wait)
-          (with-timeout (10 (error "the killed diff was not cleaned up"))
-            (while (> (length (directory-files temporary-file-directory nil
-                                               "\\`git-gutter-cur"))
-                      0)
-              (accept-process-output nil 0.1)))
-          (should (equal (directory-files temporary-file-directory nil
-                                          "\\`git-gutter-cur")
-                         nil))
-          (set-buffer-modified-p nil))
+        (progn
+          (git-gutter-test:with-file-in-repo
+            (should-not git-gutter--live-update-file)
+            (goto-char (point-min))
+            (insert "x")
+            (git-gutter:live-update)
+            ;; The first diff is still running: this update is only noted.
+            (goto-char (point-max))
+            (insert "new\n")
+            (git-gutter:live-update)
+            (should git-gutter--live-update-pending)
+            (git-gutter-test:wait-for-live-update)
+            ;; The first diff alone gives ((modified 1 1)).
+            (should (equal (git-gutter-test:hunk-list) '((modified 1 2))))
+            (should (equal (directory-files temporary-file-directory t
+                                            "\\`git-gutter-cur")
+                           (list git-gutter--live-update-file)))
+            (set-buffer-modified-p nil))
+          ;; `git-gutter-test:with-file-in-repo' killed the buffer.
+          (should-not (directory-files temporary-file-directory nil
+                                       "\\`git-gutter-")))
       (delete-directory temporary-file-directory t))))
 
 (ert-deftest git-gutter:kill-emacs-deletes-temp-files ()
-  "`kill-emacs-hook' deletes the cached original and running copies."
+  "`kill-emacs-hook' deletes the cached original and the buffer's copy."
   (git-gutter-test:with-file-in-repo
     (should (memq #'git-gutter--delete-temp-files kill-emacs-hook))
     (git-gutter-test:live-update-and-wait)
-    (let ((original (cdr git-gutter:live-update-cache)))
+    (let ((original (cdr git-gutter:live-update-cache))
+          (copy git-gutter--live-update-file))
       (should (file-exists-p original))
-      ;; Start a live update and do not wait for its diff.
-      (insert "y")
-      (git-gutter:live-update)
-      (let ((now (car git-gutter--live-update-files)))
-        (should (file-exists-p now))
-        (git-gutter--delete-temp-files)
-        (should-not (file-exists-p original))
-        (should-not (file-exists-p now))
-        (should-not git-gutter:live-update-cache)
-        (should-not git-gutter--live-update-files)))
-    ;; The diff fails without its files; its sentinel must not signal.
-    (with-timeout (10 (error "live update did not finish"))
-      (while (get-buffer (git-gutter:diff-process-buffer
-                          (file-name-nondirectory (git-gutter:base-file))))
-        (accept-process-output nil 0.1)))
+      (should (file-exists-p copy))
+      (git-gutter--delete-temp-files)
+      (should-not (file-exists-p original))
+      (should-not (file-exists-p copy))
+      (should-not git-gutter:live-update-cache)
+      (should-not git-gutter--live-update-file))
     (set-buffer-modified-p nil)))
 
 (ert-deftest git-gutter:write-current-content-coding ()

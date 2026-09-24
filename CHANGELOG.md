@@ -11,6 +11,13 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
 
 ## [Unreleased]
 
+### Changed
+
+- Live update writes the buffer to one temporary file per buffer,
+  created at the buffer's first live update, instead of a new file for
+  each update. It no longer starts a `diff` while the buffer's previous
+  one is still running; it runs again when that one finishes.
+
 ## [0.94.2] - 2026-09-23
 
 ### Fixed
