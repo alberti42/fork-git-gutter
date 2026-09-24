@@ -606,7 +606,8 @@ signs.")
   "The groups drawn so far by `git-gutter:view-diff-infos'.")
 
 (defun git-gutter--after-change (beg end _len)
-  "Add the text from BEG to END to `git-gutter--edited'."
+  "Add the text from BEG to END to `git-gutter--edited'.
+Delete the sign overlays there that no longer start a line."
   (cond ((eq git-gutter--edited t))
         ((null git-gutter--edited)
          (setq git-gutter--edited (cons (copy-marker beg) (copy-marker end t))))
@@ -614,7 +615,15 @@ signs.")
          (when (< beg (car git-gutter--edited))
            (set-marker (car git-gutter--edited) beg))
          (when (> end (cdr git-gutter--edited))
-           (set-marker (cdr git-gutter--edited) end)))))
+           (set-marker (cdr git-gutter--edited) end))))
+  ;; When an edit joins two lines, the second line's overlay moves to the
+  ;; join and would show a second sign on that screen row until the next
+  ;; update.
+  (save-excursion
+    (dolist (ov (overlays-in beg (min (1+ end) (point-max))))
+      (when (and (overlay-get ov 'git-gutter)
+                 (progn (goto-char (overlay-start ov)) (not (bolp))))
+        (delete-overlay ov)))))
 
 (defun git-gutter--set-edited (value)
   "Set `git-gutter--edited' to VALUE, and release its old markers."
@@ -665,15 +674,20 @@ BEG is the start of the first edited line, END the end of the last.
     git-gutter--edited))
 
 (defun git-gutter--group-edited-p (group)
-  "Non-nil if text in the lines of GROUP was edited."
+  "Non-nil if text in the lines of GROUP was edited.
+A group whose first or last overlay `git-gutter--after-change' deleted
+counts as edited."
   (or (eq git-gutter--edited-lines t)
       (and git-gutter--edited-lines
-           (let ((ovs (git-gutter--group-overlays group)))
-             ;; The overlays start at the beginning of their lines, unless
-             ;; an edit moved them, so comparing the starts is enough.
-             (and (<= (overlay-start (car ovs)) (cdr git-gutter--edited-lines))
-                  (>= (overlay-start (car (last ovs)))
-                      (car git-gutter--edited-lines)))))))
+           (let* ((ovs (git-gutter--group-overlays group))
+                  (first (car ovs))
+                  (last (car (last ovs))))
+             (or (not (overlay-buffer first))
+                 (not (overlay-buffer last))
+                 ;; The overlays start at the beginning of their lines,
+                 ;; so comparing the starts is enough.
+                 (and (<= (overlay-start first) (cdr git-gutter--edited-lines))
+                      (>= (overlay-start last) (car git-gutter--edited-lines))))))))
 
 (defun git-gutter:put-signs (sign points &optional wrap-sign)
   "Put SIGN at each position in POINTS, and return the overlays.

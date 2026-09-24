@@ -31,6 +31,10 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
   and the base buffer's live updates failed until its next full update.
 - Killing an indirect buffer stopped a running full update of its base
   buffer, whose signs then stayed as they were until the next one.
+- When an edit joined lines that had signs, for example an undo of
+  inserted newlines, the sign of each joined line moved into the joined
+  line and showed as an extra sign on its screen row, until the next
+  update. An edit now deletes the signs that no longer start a line.
 
 ## [0.94.2] - 2026-09-23
 

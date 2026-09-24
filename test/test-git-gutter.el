@@ -663,6 +663,41 @@ bar
           ;; The test reached the code that keeps groups.
           (should (> kept 20)))))))
 
+(ert-deftest git-gutter:joined-lines-leave-one-sign ()
+  "Joining lines deletes the overlays that no longer start a line."
+  (dolist (visual '(nil t))
+    (git-gutter-test:with-lines
+      (let ((git-gutter:visual-line visual)
+            (git-gutter:unchanged-sign nil))
+        (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'modified 3 6)))
+        ;; Join lines 3 to 6 into one line, as an undo of splits would.
+        (goto-char (point-min))
+        (forward-line 2)
+        (dotimes (_ 3)
+          (end-of-line)
+          (delete-char 1))
+        (should (equal (git-gutter-test:sign-lines) '((3 "="))))
+        (dolist (ov (git-gutter-test:sign-overlays))
+          (goto-char (overlay-start ov))
+          (should (bolp)))
+        ;; The next update draws the joined line once.
+        (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'modified 3 3)))
+        (should (equal (git-gutter-test:sign-lines) '((3 "="))))))
+    ;; Only the group's last overlay goes: join lines 5 and 6.
+    (git-gutter-test:with-lines
+      (let ((git-gutter:visual-line visual)
+            (git-gutter:unchanged-sign nil))
+        (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'modified 3 6)))
+        (goto-char (point-min))
+        (forward-line 4)
+        (end-of-line)
+        (delete-char 1)
+        ;; Same start, sign and number of lines: the old group is asked
+        ;; whether it was edited, with its last overlay deleted.
+        (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'modified 3 6)))
+        (should (equal (git-gutter-test:sign-lines)
+                       '((3 "=") (4 "=") (5 "=") (6 "="))))))))
+
 (ert-deftest git-gutter:update-diffinfo-other-view-function ()
   "With another view function, the clear function runs first."
   (git-gutter-test:with-lines
