@@ -1035,6 +1035,20 @@ on."
     (should (equal (git-gutter-test:hunk-list) '((modified 1 2))))
     (set-buffer-modified-p nil)))
 
+(ert-deftest git-gutter:killing-clone-keeps-full-update ()
+  "Killing a clone does not stop the base buffer's full update."
+  (git-gutter-test:with-file-in-repo
+    (let ((clone (clone-indirect-buffer nil nil)))
+      (goto-char (point-min))
+      (insert "x")
+      (save-buffer)
+      ;; `save-buffer' started a full update.
+      (should (get-buffer (git-gutter:diff-process-buffer (git-gutter:base-file))))
+      (kill-buffer clone)
+      (should (get-buffer (git-gutter:diff-process-buffer (git-gutter:base-file))))
+      (git-gutter-test:wait-for-full-update)
+      (should (equal (git-gutter-test:hunk-list) '((modified 1 1)))))))
+
 (ert-deftest git-gutter:write-current-content-coding ()
   "The current content is written in `buffer-file-coding-system'."
   (let ((file (make-temp-file "git-gutter-test")))

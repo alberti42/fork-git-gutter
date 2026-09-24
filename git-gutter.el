@@ -831,9 +831,11 @@ that of another file with the same base name."
 
 (defun git-gutter:kill-buffer-hook ()
   (git-gutter--delete-buffer-temp-files)
-  (let ((buf (git-gutter:diff-process-buffer (git-gutter:base-file))))
-    (git-gutter:awhen (get-buffer buf)
-      (kill-buffer it))))
+  ;; In an indirect buffer, the process buffer is the base buffer's.
+  (unless (buffer-base-buffer)
+    (let ((buf (git-gutter:diff-process-buffer (git-gutter:base-file))))
+      (git-gutter:awhen (get-buffer buf)
+        (kill-buffer it)))))
 
 ;;;###autoload
 (defun git-gutter:linum-setup ()
