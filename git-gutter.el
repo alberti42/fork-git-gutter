@@ -244,6 +244,8 @@ Can be a directory-local variable in your project.")
 (defvar-local git-gutter--live-update-file nil
   "Temporary file that live update writes the buffer to, or nil.
 The first live update in the buffer creates it; later ones overwrite it.")
+(defvar-local git-gutter--live-update-process nil
+  "The diff process of the live update running in the current buffer, or nil.")
 (defvar-local git-gutter--live-update-pending nil
   "Non-nil if a live update was due while the previous one's diff ran.")
 
@@ -823,12 +825,6 @@ WINDOW is deselected; then it does nothing."
 (defsubst git-gutter:diff-process-buffer (curfile)
   (concat " *git-gutter-" curfile "-*"))
 
-(defun git-gutter--live-update-process-buffer (file)
-  "Name of the process buffer of live update for FILE, an absolute name.
-It differs from the name of the full update's process buffer, and from
-that of another file with the same base name."
-  (concat " *git-gutter-live-" file "-*"))
-
 (defun git-gutter:kill-buffer-hook ()
   (git-gutter--delete-buffer-temp-files)
   ;; In an indirect buffer, the process buffer is the base buffer's.
@@ -1303,6 +1299,7 @@ still show the right sign, and delete the others."
       ;; delete the base buffer's files, nor draw on its overlays.
       (setq git-gutter:live-update-cache nil
             git-gutter--live-update-file nil
+            git-gutter--live-update-process nil
             git-gutter--live-update-pending nil
             git-gutter--groups nil)
       (current-buffer))))
@@ -1429,35 +1426,39 @@ start revision."
     (start-file-process "git-gutter:update-timer" proc-buf
                         "diff" "-U0" original now)))
 
-(defun git-gutter:start-live-update (file original now)
-  "Start diff of ORIGINAL and NOW, the versions of FILE, an absolute name."
-  (let ((proc-bufname (git-gutter--live-update-process-buffer file)))
-    (let* ((curbuf (current-buffer))
-           (update (cl-incf git-gutter--last-update))
-           (proc-buf (get-buffer-create proc-bufname))
-           (process (git-gutter:start-raw-diff-process proc-buf original now)))
-      (set-process-query-on-exit-flag process nil)
-      (set-process-sentinel
-       process
-       (lambda (proc _event)
-         (unless (process-live-p proc)
-           ;; diff exits with 0 or 1; 2 means it failed, for example
-           ;; because a temporary file is gone.  Keep the signs then.
-           (when (and (eq (process-status proc) 'exit)
-                      (<= (process-exit-status proc) 1)
-                      (buffer-live-p curbuf)
-                      (= update (buffer-local-value 'git-gutter--last-update curbuf)))
-             (let ((diffinfos (git-gutter:process-diff-output (process-buffer proc))))
-               (with-current-buffer curbuf
-                 (setq git-gutter:enabled nil)
-                 (git-gutter:update-diffinfo diffinfos)
-                 (setq git-gutter:enabled t))))
-           (when (buffer-live-p proc-buf)
-             (kill-buffer proc-buf))
-           ;; The buffer changed while diff ran: update again.
-           (when (and (buffer-live-p curbuf)
-                      (buffer-local-value 'git-gutter--live-update-pending curbuf))
+(defun git-gutter:start-live-update (_file original now)
+  "Start diff of ORIGINAL and NOW, the original and current versions.
+The process is stored in `git-gutter--live-update-process'.  The first
+argument, the file name, is not used."
+  (let* ((curbuf (current-buffer))
+         (update (cl-incf git-gutter--last-update))
+         (proc-buf (generate-new-buffer " *git-gutter-live*"))
+         (process (git-gutter:start-raw-diff-process proc-buf original now)))
+    (setq git-gutter--live-update-process process)
+    (set-process-query-on-exit-flag process nil)
+    (set-process-sentinel
+     process
+     (lambda (proc _event)
+       (unless (process-live-p proc)
+         ;; diff exits with 0 or 1; 2 means it failed, for example
+         ;; because a temporary file is gone.  Keep the signs then.
+         (when (and (eq (process-status proc) 'exit)
+                    (<= (process-exit-status proc) 1)
+                    (buffer-live-p curbuf)
+                    (= update (buffer-local-value 'git-gutter--last-update curbuf)))
+           (let ((diffinfos (git-gutter:process-diff-output (process-buffer proc))))
              (with-current-buffer curbuf
+               (setq git-gutter:enabled nil)
+               (git-gutter:update-diffinfo diffinfos)
+               (setq git-gutter:enabled t))))
+         (when (buffer-live-p proc-buf)
+           (kill-buffer proc-buf))
+         (when (buffer-live-p curbuf)
+           (with-current-buffer curbuf
+             (when (eq git-gutter--live-update-process proc)
+               (setq git-gutter--live-update-process nil))
+             ;; The buffer changed while diff ran: update again.
+             (when git-gutter--live-update-pending
                (setq git-gutter--live-update-pending nil)
                (git-gutter:live-update)))))))))
 
@@ -1502,7 +1503,11 @@ this function in `kill-emacs-hook' deletes the files that they would."
       (git-gutter--delete-buffer-temp-files))))
 
 (defun git-gutter--delete-buffer-temp-files ()
-  "Delete the temporary files of live update in the current buffer."
+  "Delete the temporary files of live update in the current buffer.
+Stop the buffer's running live update first: its diff reads them."
+  (when (process-live-p git-gutter--live-update-process)
+    (delete-process git-gutter--live-update-process))
+  (setq git-gutter--live-update-process nil)
   (when git-gutter:live-update-cache
     (git-gutter:clear-live-update-cache))
   (when git-gutter--live-update-file
@@ -1534,20 +1539,19 @@ for the repository root and once for the original version of FILE."
 
 (defun git-gutter:live-update ()
   (git-gutter:awhen (git-gutter:base-file)
-    (let ((proc-buf (get-buffer (git-gutter--live-update-process-buffer it))))
-      (if (and proc-buf (get-buffer-process proc-buf))
-          ;; The previous diff still reads `git-gutter--live-update-file';
-          ;; its sentinel runs this function again.
-          (setq git-gutter--live-update-pending t)
-        (when (and git-gutter:enabled
-                   (git-gutter:should-update-p))
-          (git-gutter:awhen (cdr (git-gutter:live-update-cache it))
-            (unless (and git-gutter--live-update-file
-                         (file-exists-p git-gutter--live-update-file))
-              (setq git-gutter--live-update-file (make-temp-file "git-gutter-cur")))
-            (git-gutter:write-current-content git-gutter--live-update-file)
-            (git-gutter:start-live-update (git-gutter:base-file)
-                                          it git-gutter--live-update-file)))))))
+    (if (process-live-p git-gutter--live-update-process)
+        ;; The previous diff still reads `git-gutter--live-update-file';
+        ;; its sentinel runs this function again.
+        (setq git-gutter--live-update-pending t)
+      (when (and git-gutter:enabled
+                 (git-gutter:should-update-p))
+        (git-gutter:awhen (cdr (git-gutter:live-update-cache it))
+          (unless (and git-gutter--live-update-file
+                       (file-exists-p git-gutter--live-update-file))
+            (setq git-gutter--live-update-file (make-temp-file "git-gutter-cur")))
+          (git-gutter:write-current-content git-gutter--live-update-file)
+          (git-gutter:start-live-update (git-gutter:base-file)
+                                        it git-gutter--live-update-file))))))
 
 (defun git-gutter:all-hunks ()
   "Cound unstaged hunks in all buffers"

@@ -810,7 +810,7 @@ on."
              (insert "ONE")
              (git-gutter:live-update)
              (with-timeout (10 (error "live update did not finish"))
-               (while (get-buffer (git-gutter--live-update-process-buffer (git-gutter:base-file)))
+               (while git-gutter--live-update-process
                  (accept-process-output nil 0.1)))
              (should (equal (mapcar #'git-gutter-hunk-start-line git-gutter:diffinfos)
                             '(1))))
@@ -825,7 +825,7 @@ on."
   (insert "x")
   (git-gutter:live-update)
   (with-timeout (10 (error "live update did not finish"))
-    (while (get-buffer (git-gutter--live-update-process-buffer (git-gutter:base-file)))
+    (while git-gutter--live-update-process
       (accept-process-output nil 0.1))))
 
 (ert-deftest git-gutter:live-update-cache ()
@@ -918,8 +918,7 @@ on."
 (defun git-gutter-test:wait-for-live-update ()
   "Wait until no live update is running or due."
   (with-timeout (10 (error "live update did not finish"))
-    (while (or git-gutter--live-update-pending
-               (get-buffer (git-gutter--live-update-process-buffer (git-gutter:base-file))))
+    (while (or git-gutter--live-update-pending git-gutter--live-update-process)
       (accept-process-output nil 0.1))))
 
 (ert-deftest git-gutter:live-update-one-temp-file ()
@@ -1049,6 +1048,27 @@ on."
       (git-gutter-test:wait-for-full-update)
       (should (equal (git-gutter-test:hunk-list) '((modified 1 1)))))))
 
+(ert-deftest git-gutter:clone-live-update-does-not-wait ()
+  "A base buffer and its clone run their live updates at the same time."
+  (git-gutter-test:with-file-in-repo
+    (let ((clone (clone-indirect-buffer nil nil)))
+      (unwind-protect
+          (progn
+            (goto-char (point-min))
+            (insert "x")
+            (git-gutter:live-update)
+            (with-current-buffer clone
+              (setq git-gutter:enabled t)
+              (git-gutter:live-update)
+              (should-not git-gutter--live-update-pending)
+              (should (process-live-p git-gutter--live-update-process)))
+            (dolist (buf (list (current-buffer) clone))
+              (with-current-buffer buf
+                (git-gutter-test:wait-for-live-update)
+                (should (equal (git-gutter-test:hunk-list) '((modified 1 1)))))))
+        (kill-buffer clone)))
+    (set-buffer-modified-p nil)))
+
 (ert-deftest git-gutter:write-current-content-coding ()
   "The current content is written in `buffer-file-coding-system'."
   (let ((file (make-temp-file "git-gutter-test")))
@@ -1175,7 +1195,7 @@ With CHANGE-BUFFER, call it in the buffer and run a live update."
             (funcall change-buffer)
             (git-gutter:live-update)
             (with-timeout (10 (error "live update did not finish"))
-              (while (get-buffer (git-gutter--live-update-process-buffer (git-gutter:base-file)))
+              (while git-gutter--live-update-process
                 (accept-process-output nil 0.1))))
           (mapcar (lambda (h)
                     (list (git-gutter-hunk-type h) (git-gutter-hunk-start-line h)))
