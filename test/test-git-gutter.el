@@ -1048,27 +1048,6 @@ on."
                  (set-buffer-modified-p nil))))
          (mapc #'kill-buffer bufs))))))
 
-(ert-deftest git-gutter:clone-has-own-temp-files ()
-  "Killing a clone does not delete the base buffer's live update files."
-  (git-gutter-test:with-file-in-repo
-    (git-gutter-test:live-update-and-wait)
-    (let ((original (cdr git-gutter:live-update-cache))
-          (copy git-gutter--live-update-file)
-          (clone (clone-indirect-buffer nil nil)))
-      (with-current-buffer clone
-        (should-not git-gutter:live-update-cache)
-        (should-not git-gutter--live-update-file)
-        (should-not git-gutter--groups))
-      (kill-buffer clone)
-      (should (file-exists-p original))
-      (should (file-exists-p copy)))
-    (goto-char (point-max))
-    (insert "new\n")
-    (git-gutter:live-update)
-    (git-gutter-test:wait-for-live-update)
-    (should (equal (git-gutter-test:hunk-list) '((modified 1 2))))
-    (set-buffer-modified-p nil)))
-
 (ert-deftest git-gutter:killing-clone-keeps-full-update ()
   "Killing a clone does not stop the base buffer's full update."
   (git-gutter-test:with-file-in-repo
@@ -1083,26 +1062,98 @@ on."
       (git-gutter-test:wait-for-full-update)
       (should (equal (git-gutter-test:hunk-list) '((modified 1 1)))))))
 
+(defmacro git-gutter-test:with-and-without-indirect-advice (&rest body)
+  "Run BODY twice: with the advice on `make-indirect-buffer', and without.
+Natively compiled callers of `make-indirect-buffer' may skip the advice."
+  (declare (indent 0))
+  `(dolist (advice '(t nil))
+     (unless advice
+       (advice-remove 'make-indirect-buffer #'git-gutter:make-indirect-buffer))
+     (unwind-protect
+         (progn ,@body)
+       (advice-add 'make-indirect-buffer :around #'git-gutter:make-indirect-buffer))))
+
+(ert-deftest git-gutter:clone-has-own-temp-files ()
+  "Killing a clone does not delete the base buffer's live update files."
+  (git-gutter-test:with-and-without-indirect-advice
+    (git-gutter-test:with-file-in-repo
+      (git-gutter-test:live-update-and-wait)
+      (let ((original (cdr git-gutter:live-update-cache))
+            (copy git-gutter--live-update-file))
+        (kill-buffer (clone-indirect-buffer nil nil))
+        (should (file-exists-p original))
+        (should (file-exists-p copy)))
+      (goto-char (point-max))
+      (insert "new\n")
+      (git-gutter:live-update)
+      (git-gutter-test:wait-for-live-update)
+      (should (equal (git-gutter-test:hunk-list) '((modified 1 2))))
+      (set-buffer-modified-p nil))))
+
 (ert-deftest git-gutter:clone-live-update-does-not-wait ()
-  "A base buffer and its clone run their live updates at the same time."
-  (git-gutter-test:with-file-in-repo
-    (let ((clone (clone-indirect-buffer nil nil)))
-      (unwind-protect
-          (progn
-            (goto-char (point-min))
-            (insert "x")
-            (git-gutter:live-update)
-            (with-current-buffer clone
-              (setq git-gutter:enabled t)
+  "A base buffer and its clone run their live updates at the same time.
+Each has its own files."
+  (git-gutter-test:with-and-without-indirect-advice
+    (git-gutter-test:with-file-in-repo
+      (git-gutter-test:live-update-and-wait)
+      (let ((clone (clone-indirect-buffer nil nil)))
+        (unwind-protect
+            (progn
+              (goto-char (point-min))
+              (insert "x")
               (git-gutter:live-update)
-              (should-not git-gutter--live-update-pending)
-              (should (process-live-p git-gutter--live-update-process)))
-            (dolist (buf (list (current-buffer) clone))
-              (with-current-buffer buf
-                (git-gutter-test:wait-for-live-update)
-                (should (equal (git-gutter-test:hunk-list) '((modified 1 1)))))))
-        (kill-buffer clone)))
-    (set-buffer-modified-p nil)))
+              (with-current-buffer clone
+                (setq git-gutter:enabled t
+                      git-gutter:last-chars-modified-tick nil)
+                (git-gutter:live-update)
+                (should-not git-gutter--live-update-pending)
+                (should (process-live-p git-gutter--live-update-process)))
+              (should-not (equal (buffer-local-value 'git-gutter--live-update-file clone)
+                                 git-gutter--live-update-file))
+              (should-not (equal (buffer-local-value 'git-gutter:live-update-cache clone)
+                                 git-gutter:live-update-cache))
+              (dolist (buf (list (current-buffer) clone))
+                (with-current-buffer buf
+                  (git-gutter-test:wait-for-live-update)
+                  (should (equal (git-gutter-test:hunk-list) '((modified 1 1)))))))
+          (kill-buffer clone)))
+      (should (file-exists-p (cdr git-gutter:live-update-cache)))
+      (set-buffer-modified-p nil))))
+
+(ert-deftest git-gutter:update-diffinfo-random-edits-through-clone ()
+  "Edits made in a clone do not leave wrong signs in the base buffer.
+The base buffer does not see them in its `after-change-functions'."
+  (random "git-gutter-clone")
+  (git-gutter-test:with-and-without-indirect-advice
+    (dolist (visual '(nil t))
+      (git-gutter-test:with-lines
+        (let ((git-gutter:visual-line visual)
+              (git-gutter:unchanged-sign ".")
+              (clone (clone-indirect-buffer nil nil))
+              (hunks nil))
+          (unwind-protect
+              (dotimes (_ 100)
+                (with-current-buffer clone
+                  (dotimes (_ (random 3))
+                    (goto-char (1+ (random (buffer-size))))
+                    (pcase (random 4)
+                      (0 (insert "ab"))
+                      (1 (insert "\n"))
+                      (2 (insert "x\ny\n"))
+                      (3 (delete-region (point) (min (point-max) (+ (point) (random 6))))))))
+                (setq hunks (if (and hunks (zerop (random 2)))
+                                hunks
+                              (git-gutter-test:random-hunks
+                               (line-number-at-pos (point-max)))))
+                (let ((text (buffer-string)))
+                  (git-gutter:update-diffinfo hunks)
+                  (let ((incremental (prin1-to-string (git-gutter-test:sign-state))))
+                    (with-temp-buffer
+                      (insert text)
+                      (git-gutter:update-diffinfo hunks)
+                      (should (equal incremental
+                                     (prin1-to-string (git-gutter-test:sign-state))))))))
+            (kill-buffer clone)))))))
 
 (ert-deftest git-gutter:write-current-content-coding ()
   "The current content is written in `buffer-file-coding-system'."

@@ -31,6 +31,11 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
   and the base buffer's live updates failed until its next full update.
 - Killing an indirect buffer stopped a running full update of its base
   buffer, whose signs then stayed as they were until the next one.
+- Edits made in an indirect buffer could leave wrong signs in its base
+  buffer when the advice on `make-indirect-buffer` did not run, for
+  example when natively compiled code called it: the base buffer did not
+  know it had an indirect buffer, and kept signs of lines that the edits
+  had changed.
 - When an edit joined lines that had signs, for example an undo of
   inserted newlines, the sign of each joined line moved into the joined
   line and showed as an extra sign on its screen row, until the next

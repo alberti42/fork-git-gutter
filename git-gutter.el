@@ -237,6 +237,16 @@ Can be a directory-local variable in your project.")
 (defvar-local git-gutter:enabled nil)
 (defvar git-gutter:diffinfos nil)
 (defvar git-gutter:has-indirect-buffers nil)
+
+(defun git-gutter--has-indirect-buffers-p ()
+  "Non-nil if an indirect buffer of the current buffer exists.
+`git-gutter:has-indirect-buffers' counts them through advice on
+`make-indirect-buffer', which does not run when natively compiled code
+calls it, so also look for them."
+  (or git-gutter:has-indirect-buffers
+      (let ((base (current-buffer)))
+        (cl-some (lambda (buf) (eq (buffer-base-buffer buf) base))
+                 (buffer-list)))))
 (defvar git-gutter:vcs-type nil)
 (defvar git-gutter:revision-history nil)
 (defvar git-gutter:update-timer nil)
@@ -244,6 +254,10 @@ Can be a directory-local variable in your project.")
 (defvar-local git-gutter--live-update-file nil
   "Temporary file that live update writes the buffer to, or nil.
 The first live update in the buffer creates it; later ones overwrite it.")
+(defvar-local git-gutter--temp-files-owner nil
+  "The buffer whose live update made the temporary files named here.
+A clone copies the local variables of its base buffer, and with them the
+names of the base buffer's files; see `git-gutter--own-temp-files'.")
 (defvar-local git-gutter--live-update-process nil
   "The diff process of the live update running in the current buffer, or nil.")
 (defvar-local git-gutter--live-update-pending nil
@@ -468,7 +482,7 @@ Argument TEST is the case before BODY execution."
                (with-current-buffer curbuf
                  (setq git-gutter:enabled nil)
                  (git-gutter:update-diffinfo diffinfos)
-                 (when git-gutter:has-indirect-buffers
+                 (when (git-gutter--has-indirect-buffers-p)
                    (git-gutter:update-indirect-buffers file))
                  (setq git-gutter:enabled t)))
              (kill-buffer proc-buf))))))))
@@ -524,7 +538,7 @@ does not start another pair of processes meanwhile."
                          (lambda (a b)
                            (< (git-gutter-hunk-start-line a)
                               (git-gutter-hunk-start-line b)))))
-                  (when git-gutter:has-indirect-buffers
+                  (when (git-gutter--has-indirect-buffers-p)
                     (git-gutter:update-indirect-buffers file))
                   (setq git-gutter:enabled t)))
               (when (buffer-live-p proc-buf)
@@ -969,7 +983,7 @@ still show the right sign, and delete the others."
     ;; `after-change-functions'.
     (unless (and (memq #'git-gutter--after-change after-change-functions)
                  (not (buffer-base-buffer))
-                 (not git-gutter:has-indirect-buffers))
+                 (not (git-gutter--has-indirect-buffers-p)))
       (git-gutter--set-edited t))
     (setq git-gutter--edited-lines (git-gutter--edited-lines))
     (if (eq git-gutter--edited-lines t)
@@ -1501,8 +1515,22 @@ argument, the file name, is not used."
            (file-name-as-directory
             (buffer-substring-no-properties (point) (line-end-position)))))))))
 
+(defun git-gutter--own-temp-files ()
+  "Forget live update's files and process if another buffer made them.
+This happens in a clone, which copies its base buffer's local variables.
+Advice on `make-indirect-buffer' does not run when natively compiled
+code calls it, so the clone cannot rely on that to clear them."
+  (when (and git-gutter--temp-files-owner
+             (not (eq git-gutter--temp-files-owner (current-buffer))))
+    (setq git-gutter:live-update-cache nil
+          git-gutter--live-update-file nil
+          git-gutter--live-update-process nil
+          git-gutter--live-update-pending nil
+          git-gutter--temp-files-owner nil)))
+
 (defun git-gutter:clear-live-update-cache ()
   "Delete the file of `git-gutter:live-update-cache' and clear the cache."
+  (git-gutter--own-temp-files)
   (let ((original (cdr git-gutter:live-update-cache)))
     (when (and original (file-exists-p original))
       (delete-file original)))
@@ -1519,6 +1547,7 @@ this function in `kill-emacs-hook' deletes the files that they would."
 (defun git-gutter--delete-buffer-temp-files ()
   "Delete the temporary files of live update in the current buffer.
 Stop the buffer's running live update first: its diff reads them."
+  (git-gutter--own-temp-files)
   (when (process-live-p git-gutter--live-update-process)
     (delete-process git-gutter--live-update-process))
   (setq git-gutter--live-update-process nil)
@@ -1529,6 +1558,7 @@ Stop the buffer's running live update first: its diff reads them."
 
 (defun git-gutter--delete-live-update-file ()
   "Delete `git-gutter--live-update-file' and forget it."
+  (git-gutter--own-temp-files)
   (when (and git-gutter--live-update-file
              (file-exists-p git-gutter--live-update-file))
     (delete-file git-gutter--live-update-file))
@@ -1538,8 +1568,10 @@ Stop the buffer's running live update first: its diff reads them."
   "Return `git-gutter:live-update-cache' for FILE, filling it if empty.
 Filling it runs the version control system twice, synchronously: once
 for the repository root and once for the original version of FILE."
+  (git-gutter--own-temp-files)
   (or git-gutter:live-update-cache
-      (setq git-gutter:live-update-cache
+      (setq git-gutter--temp-files-owner (current-buffer)
+            git-gutter:live-update-cache
             (let* ((root (file-truename (git-gutter:vcs-root git-gutter:vcs-type)))
                    (original (make-temp-file "git-gutter-orig")))
               ;; ROOT is a true name; the file name must be one too, or a
@@ -1552,6 +1584,7 @@ for the repository root and once for the original version of FILE."
               (cons root original)))))
 
 (defun git-gutter:live-update ()
+  (git-gutter--own-temp-files)
   (git-gutter:awhen (git-gutter:base-file)
     (if (process-live-p git-gutter--live-update-process)
         ;; The previous diff still reads `git-gutter--live-update-file';
@@ -1562,7 +1595,8 @@ for the repository root and once for the original version of FILE."
         (git-gutter:awhen (cdr (git-gutter:live-update-cache it))
           (unless (and git-gutter--live-update-file
                        (file-exists-p git-gutter--live-update-file))
-            (setq git-gutter--live-update-file (make-temp-file "git-gutter-cur")))
+            (setq git-gutter--temp-files-owner (current-buffer)
+                  git-gutter--live-update-file (make-temp-file "git-gutter-cur")))
           (git-gutter:write-current-content git-gutter--live-update-file)
           (git-gutter:start-live-update (git-gutter:base-file)
                                         it git-gutter--live-update-file))))))
