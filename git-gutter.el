@@ -719,23 +719,31 @@ that already shows the same sign at the same position is kept unchanged."
         (sign-key (git-gutter--sign-key sign))
         overlays)
     (dolist (pos points)
-      (let* ((eol (when git-gutter:visual-line
-                    (save-excursion (goto-char pos) (line-end-position))))
-             ;; Span to eol so `wrap-prefix' fires on every continuation row.
-             (end (or eol pos))
+      (let* ((visual git-gutter:visual-line)
+             ;; Span the line and its newline: an edit that deletes the
+             ;; line deletes the overlay (`evaporate'), instead of moving
+             ;; it onto the next line.  With `git-gutter:visual-line',
+             ;; `wrap-prefix' then applies to every continuation row.
+             (end (save-excursion (goto-char pos) (min (1+ (line-end-position))
+                                                       (point-max))))
              (key (vector sign-key
-                          (when eol (git-gutter--sign-key wrap-sign))
-                          (when eol (get-text-property pos 'wrap-prefix))))
+                          (when visual (git-gutter--sign-key wrap-sign))
+                          (when visual (get-text-property pos 'wrap-prefix))))
              (ov (git-gutter--old-overlay pos)))
         (if (not ov)
-            (setq ov (make-overlay pos end))
+            (progn
+              (setq ov (make-overlay pos end))
+              (when (< pos end)
+                (overlay-put ov 'evaporate t)))
           (unless (= (overlay-end ov) end)
+            ;; `move-overlay' deletes an empty overlay that evaporates.
+            (overlay-put ov 'evaporate (< pos end))
             (move-overlay ov pos end)))
         (unless (equal-including-properties (overlay-get ov 'git-gutter-key) key)
           (overlay-put ov 'before-string gutter-sign)
           (overlay-put ov 'priority priority)
           (overlay-put ov 'wrap-prefix
-                       (when eol (git-gutter:wrap-prefix-for-sign wrap-sign pos)))
+                       (when visual (git-gutter:wrap-prefix-for-sign wrap-sign pos)))
           (overlay-put ov 'git-gutter-key key))
         (overlay-put ov 'git-gutter t)
         (push ov overlays)))
