@@ -1102,7 +1102,8 @@ Each has its own files."
   (git-gutter-test:with-and-without-indirect-advice
     (git-gutter-test:with-file-in-repo
       (git-gutter-test:live-update-and-wait)
-      (let ((clone (clone-indirect-buffer nil nil)))
+      (let* ((base (current-buffer))
+             (clone (clone-indirect-buffer nil nil)))
         (unwind-protect
             (progn
               (goto-char (point-min))
@@ -1113,7 +1114,12 @@ Each has its own files."
                       git-gutter:last-chars-modified-tick nil)
                 (git-gutter:live-update)
                 (should-not git-gutter--live-update-pending)
-                (should (process-live-p git-gutter--live-update-process)))
+                ;; The diff may already have exited: test only that the
+                ;; clone started its own.
+                (should (processp git-gutter--live-update-process))
+                (should-not (eq git-gutter--live-update-process
+                                (buffer-local-value 'git-gutter--live-update-process
+                                                    base))))
               (should-not (equal (buffer-local-value 'git-gutter--live-update-file clone)
                                  git-gutter--live-update-file))
               (should-not (equal (buffer-local-value 'git-gutter:live-update-cache clone)
