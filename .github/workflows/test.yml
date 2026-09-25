@@ -54,9 +54,17 @@ jobs:
       with:
         version: 'snapshot'
 
+    # package-build, which `eask package` installs from MELPA, requires
+    # Emacs 29.1 since version 20260924.1014.
     - name: Package and compile
+      if: matrix.emacs-version != '27.2' && matrix.emacs-version != '28.2'
       run:
         make ci
+
+    - name: Compile
+      if: matrix.emacs-version == '27.2' || matrix.emacs-version == '28.2'
+      run:
+        make clean compile
 
     # The jj tests skip without jj; on Linux they must run.
     - name: Install jj
