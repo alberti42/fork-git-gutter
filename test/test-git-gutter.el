@@ -530,16 +530,36 @@ bar
           (git-gutter:unchanged-sign nil))
       (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'modified 3 3)))
       (let ((ov (car (git-gutter-test:sign-overlays))))
-        (goto-char (overlay-end ov))
+        (goto-char (overlay-start ov))
+        (end-of-line)
         (insert "abc")
         (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'modified 3 3)))
         (should (equal (git-gutter-test:sign-overlays) (list ov)))
         (should (= (overlay-end ov) (save-excursion (goto-char (overlay-start ov))
-                                                    (line-end-position))))))))
+                                                    (1+ (line-end-position)))))))))
+
+(ert-deftest git-gutter:deleted-lines-leave-no-sign ()
+  "Deleting whole lines deletes their overlays instead of stacking them."
+  (dolist (visual '(nil t))
+    ;; Delete three empty lines at once, and one by one with backspace.
+    (dolist (delete '(region backspace))
+      (git-gutter-test:with-lines
+        (let ((git-gutter:visual-line visual))
+          (goto-char (point-min))
+          (forward-line 2)
+          (insert "\n\n\n")
+          (git-gutter:update-diffinfo (list (git-gutter-test:hunk 'added 3 5)))
+          (if (eq delete 'region)
+              (delete-region (save-excursion (forward-line -3) (point)) (point))
+            (dotimes (_ 3)
+              (delete-char -1)))
+          ;; Line 3 shows the sign of the old line 6, which it is now.
+          (should (equal (git-gutter-test:sign-lines)
+                         (mapcar (lambda (line) (list line "."))
+                                 (number-sequence 1 10)))))))))
 
 ;; `git-gutter:view-diff-infos' skips the hunks and ranges of unchanged
 ;; lines whose signs are still right.
-
 (defmacro git-gutter-test:counting-put-signs (&rest body)
   "Run BODY and return the positions `git-gutter:put-signs' got."
   (declare (indent 0))

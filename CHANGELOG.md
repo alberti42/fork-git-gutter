@@ -22,6 +22,11 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
   buffer left `git-gutter` in the hooks that had been removed from the
   list, so it still drew signs. The mode now installs the new hooks when
   the variable is set, and turning it off removes the hooks it added.
+- Deleting whole lines that had signs, for example empty added lines
+  removed with backspace, moved their signs onto the next line, where
+  they showed on top of each other until the next update. A sign
+  overlay now spans its line and its newline, and deleting the line
+  deletes the overlay.
 
 ## [0.94.3] - 2026-09-24
 
