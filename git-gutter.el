@@ -724,8 +724,9 @@ that already shows the same sign at the same position is kept unchanged."
              ;; line deletes the overlay (`evaporate'), instead of moving
              ;; it onto the next line.  With `git-gutter:visual-line',
              ;; `wrap-prefix' then applies to every continuation row.
-             (end (save-excursion (goto-char pos) (min (1+ (line-end-position))
-                                                       (point-max))))
+             ;; `line-end-position' respects fields, which on Emacs 27
+             ;; takes time proportional to the number of overlays.
+             (end (save-excursion (goto-char pos) (forward-line 1) (point)))
              (key (vector sign-key
                           (when visual (git-gutter--sign-key wrap-sign))
                           (when visual (get-text-property pos 'wrap-prefix))))
