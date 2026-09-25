@@ -200,9 +200,8 @@ Staged signs are shown only for git, and only when
 A live update compares the unsaved buffer with the original version
 and runs each time Emacs has been idle for this many seconds, for
 example after you stop typing.  A value such as 0.1 shows changes while
-you edit.  Set it before `git-gutter-mode' is turned on, or restart the
-timer with `git-gutter:cancel-update-timer' and
-`git-gutter:start-update-timer'.  The value 0 also means no live updates."
+you edit.  A new value takes effect at once, also when set with
+`setq'.  The value 0 also means no live updates."
   :type '(choice (const :tag "No live updates" nil)
                  (number :tag "Idle seconds"))
   :group 'git-gutter)
@@ -250,6 +249,8 @@ calls it, so also look for them."
 (defvar git-gutter:vcs-type nil)
 (defvar git-gutter:revision-history nil)
 (defvar git-gutter:update-timer nil)
+(defvar-local git-gutter--installed-update-hooks nil
+  "The hooks in which `git-gutter-mode' added `git-gutter' in this buffer.")
 (defvar-local git-gutter:last-chars-modified-tick nil)
 (defvar-local git-gutter--live-update-file nil
   "Temporary file that live update writes the buffer to, or nil.
@@ -874,6 +875,28 @@ Use `display-line-numbers-mode' instead."
                (capitalize (symbol-name backend)))
              git-gutter:handled-backends "/"))
 
+(defun git-gutter--install-update-hooks (hooks)
+  "Run `git-gutter' from HOOKS in this buffer, and from no other hook."
+  (dolist (hook git-gutter--installed-update-hooks)
+    (remove-hook hook 'git-gutter t))
+  (dolist (hook hooks)
+    (add-hook hook 'git-gutter nil t))
+  (setq git-gutter--installed-update-hooks (copy-sequence hooks)))
+
+(defun git-gutter--update-hooks-watcher (_symbol newval operation where)
+  "Install NEWVAL, the new `git-gutter:update-hooks', where the mode is on.
+A buffer-local value (WHERE) applies to its buffer only.  Ignore `let'
+bindings (OPERATION)."
+  (when (eq operation 'set)
+    (dolist (buf (if where (list where) (buffer-list)))
+      (with-current-buffer buf
+        (when (and git-gutter-mode
+                   (or where (not (local-variable-p 'git-gutter:update-hooks))))
+          (git-gutter--install-update-hooks newval))))))
+
+(add-variable-watcher 'git-gutter:update-hooks
+                      #'git-gutter--update-hooks-watcher)
+
 ;;;###autoload
 (define-minor-mode git-gutter-mode
   "Git-Gutter mode"
@@ -898,14 +921,10 @@ Use `display-line-numbers-mode' instead."
                       #'git-gutter:window-buffer-change-function nil t)
             (add-hook 'window-selection-change-functions
                       #'git-gutter:window-selection-change-function nil t)
-            (dolist (hook git-gutter:update-hooks)
-              (add-hook hook 'git-gutter nil t))
+            (git-gutter--install-update-hooks git-gutter:update-hooks)
             (git-gutter)
-            (when (and (not git-gutter:update-timer)
-                       (git-gutter:live-update-interval))
-              (setq git-gutter:update-timer
-                    (run-with-idle-timer
-                     (git-gutter:live-update-interval) t 'git-gutter:live-update))))
+            (unless git-gutter:update-timer
+              (git-gutter--start-update-timer git-gutter:update-interval)))
         (when (> git-gutter:verbosity 2)
           (message "Here is not %s work tree" (git-gutter:show-backends)))
         (git-gutter-mode -1))
@@ -914,8 +933,7 @@ Use `display-line-numbers-mode' instead."
     (remove-hook 'change-major-mode-hook #'git-gutter--delete-buffer-temp-files t)
     (remove-hook 'after-change-functions #'git-gutter--after-change t)
     (git-gutter--set-edited t)
-    (dolist (hook git-gutter:update-hooks)
-      (remove-hook hook 'git-gutter t))
+    (git-gutter--install-update-hooks nil)
     (remove-hook 'window-buffer-change-functions
                  #'git-gutter:window-buffer-change-function t)
     (remove-hook 'window-selection-change-functions
@@ -1393,14 +1411,21 @@ start revision."
         (when git-gutter-mode
           (git-gutter))))))
 
+(defun git-gutter--start-update-timer (interval)
+  "Start the live-update timer if INTERVAL is a number above 0."
+  (let ((git-gutter:update-interval interval))
+    (when (git-gutter:live-update-interval)
+      (setq git-gutter:update-timer
+            (run-with-idle-timer (git-gutter:live-update-interval) t
+                                 'git-gutter:live-update)))))
+
 (defun git-gutter:start-update-timer ()
   (interactive)
   (when git-gutter:update-timer
     (error "Update timer is already running."))
   (unless (git-gutter:live-update-interval)
     (user-error "Set `git-gutter:update-interval' to a number above 0 first"))
-  (setq git-gutter:update-timer
-        (run-with-idle-timer (git-gutter:live-update-interval) t 'git-gutter:live-update)))
+  (git-gutter--start-update-timer git-gutter:update-interval))
 
 (defun git-gutter:cancel-update-timer ()
   (interactive)
@@ -1408,6 +1433,22 @@ start revision."
     (error "Timer is no running."))
   (cancel-timer git-gutter:update-timer)
   (setq git-gutter:update-timer nil))
+
+(defun git-gutter--update-interval-watcher (_symbol newval operation where)
+  "Restart the live-update timer with NEWVAL, the new `git-gutter:update-interval'.
+Start it only if a buffer has `git-gutter-mode' on; otherwise the mode
+starts it.  Ignore `let' bindings and buffer-local values (OPERATION and
+WHERE)."
+  (when (and (eq operation 'set) (null where))
+    (when git-gutter:update-timer
+      (cancel-timer git-gutter:update-timer)
+      (setq git-gutter:update-timer nil))
+    (when (cl-some (lambda (buf) (buffer-local-value 'git-gutter-mode buf))
+                   (buffer-list))
+      (git-gutter--start-update-timer newval))))
+
+(add-variable-watcher 'git-gutter:update-interval
+                      #'git-gutter--update-interval-watcher)
 
 (defsubst git-gutter:write-current-content (tmpfile)
   "Write the whole buffer to TMPFILE, also when it is narrowed."

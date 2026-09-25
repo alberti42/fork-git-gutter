@@ -11,6 +11,18 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
 
 ## [Unreleased]
 
+### Fixed
+
+- A new value of `git-gutter:update-interval` did not take effect: the
+  timer kept the interval it was started with, and setting the variable
+  to nil did not stop live updates. The timer now restarts when the
+  variable is set, also with `setq`.
+- A new value of `git-gutter:update-hooks` did not apply to buffers that
+  already had `git-gutter-mode` on, and turning the mode off in such a
+  buffer left `git-gutter` in the hooks that had been removed from the
+  list, so it still drew signs. The mode now installs the new hooks when
+  the variable is set, and turning it off removes the hooks it added.
+
 ## [0.94.3] - 2026-09-24
 
 ### Changed

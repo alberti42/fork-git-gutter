@@ -121,9 +121,12 @@ bar
   (with-temporary-directory
    (lambda ()
      (vc-create-repo 'Git)
-     (with-current-buffer (find-file-noselect "test.el")
-       (git-gutter-mode 1)
-       (should git-gutter-mode)))))
+     (let ((buf (find-file-noselect "test.el")))
+       (unwind-protect
+           (with-current-buffer buf
+             (git-gutter-mode 1)
+             (should git-gutter-mode))
+         (kill-buffer buf))))))
 
 (ert-deftest git-gutter-mode-failed ()
   "Case git-gutter-mode disabled"
@@ -149,9 +152,12 @@ bar
   (with-temporary-directory
    (lambda ()
      (vc-create-repo 'Git)
-     (with-current-buffer (find-file-noselect "test.el")
-       (global-git-gutter-mode 1)
-       (should git-gutter-mode)))))
+     (let ((buf (find-file-noselect "test.el")))
+       (unwind-protect
+           (with-current-buffer buf
+             (global-git-gutter-mode 1)
+             (should git-gutter-mode))
+         (kill-buffer buf))))))
 
 (ert-deftest global-git-gutter-mode-failed ()
   "Case global-git-gutter-mode disabled"
@@ -1206,6 +1212,52 @@ The base buffer does not see them in its `after-change-functions'."
       (should git-gutter-mode)
       (should-not git-gutter:update-timer)
       (should-error (git-gutter:start-update-timer) :type 'user-error))))
+
+(ert-deftest git-gutter:update-interval-watcher ()
+  "Setting `git-gutter:update-interval' restarts or cancels the timer."
+  (let ((old (default-value 'git-gutter:update-interval))
+        (git-gutter:update-timer nil))
+    (unwind-protect
+        (progn
+          ;; No buffer has the mode on: the mode starts the timer later.
+          (setq git-gutter:update-interval 2)
+          (should-not git-gutter:update-timer)
+          (git-gutter-test:with-file-in-repo
+            (let ((timer git-gutter:update-timer))
+              (should (timerp timer))
+              (should (= (float-time (timer--time timer)) 2))
+              (setq git-gutter:update-interval 0.5)
+              (should (timerp git-gutter:update-timer))
+              (should (= (float-time (timer--time git-gutter:update-timer)) 0.5))
+              (should-not (memq timer timer-idle-list))
+              (setq timer git-gutter:update-timer)
+              (setq git-gutter:update-interval nil)
+              (should-not git-gutter:update-timer)
+              (should-not (memq timer timer-idle-list))
+              ;; A `let' binding leaves the timer alone.
+              (let ((git-gutter:update-interval 1))
+                (should-not git-gutter:update-timer)))))
+      (when git-gutter:update-timer
+        (cancel-timer git-gutter:update-timer))
+      (setq git-gutter:update-timer nil)
+      (setq git-gutter:update-interval old))))
+
+(ert-deftest git-gutter:update-hooks-watcher ()
+  "Setting `git-gutter:update-hooks' changes the hooks of enabled buffers."
+  (let ((old (default-value 'git-gutter:update-hooks)))
+    (unwind-protect
+        (git-gutter-test:with-file-in-repo
+          (should (memq 'git-gutter after-revert-hook))
+          (setq git-gutter:update-hooks '(after-save-hook))
+          (should (memq 'git-gutter after-save-hook))
+          (should-not (memq 'git-gutter after-revert-hook))
+          (setq git-gutter:update-hooks '(after-revert-hook))
+          (should-not (memq 'git-gutter after-save-hook))
+          (should (memq 'git-gutter after-revert-hook))
+          ;; Turning the mode off removes the hooks that it added.
+          (git-gutter-mode -1)
+          (should-not (memq 'git-gutter after-revert-hook)))
+      (setq git-gutter:update-hooks old))))
 
 (ert-deftest git-gutter:statistic-matches-git ()
   "`git-gutter:statistic' counts the lines that `git diff --numstat' counts."
