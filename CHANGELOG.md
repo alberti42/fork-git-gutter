@@ -27,6 +27,10 @@ Releases up to 0.90 are described in [Changes](Changes). Releases 0.91 to
   they showed on top of each other until the next update. A sign
   overlay now spans its line and its newline, and deleting the line
   deletes the overlay.
+- On Emacs 27, with `git-gutter:visual-line` on, drawing the signs took
+  time proportional to the number of signed lines times the number of
+  overlays in the buffer: a full update of 20000 lines took ten times as
+  long as with the option off.
 
 ## [0.94.3] - 2026-09-24
 
